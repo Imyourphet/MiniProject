@@ -1,7 +1,5 @@
 # MUT Shuttle Bus · MiniProject
 
-แปลงหน้าจอ G1-DONE_YET_v2 เป็น React โดยแยก component, state, API และกฎการทำงานออกจากกัน
-
 ## สถานะการเชื่อมข้อมูล
 
 | ส่วน | แหล่งข้อมูล |
