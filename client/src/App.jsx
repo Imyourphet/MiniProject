@@ -38,18 +38,26 @@ function Workspace({ me, onLogout }) {
     SC06: <Driver {...props} canScan={permitted.includes('SC07')} />,
     SC07: <ScanPage {...props} />, SC08: <Driver {...props} closing canScan={permitted.includes('SC07')} />,
     SC09: <Booking {...props} />, SC10: <Departments {...props} />, SC11: <Cars {...props} />,
-  };
-  return <div className="workspace"><Sidebar me={me} screens={available} onLogout={onLogout} />
-    <main className="content"><div className="page-heading"><p className="eyebrow">MUT SHUTTLE BUS</p><h1>{current?.name || 'ระบบรถรับส่ง'}</h1></div>
-      {current && current.id !== 'SC01' && <div className="data-note sql">ข้อมูลจากฐานข้อมูล · อัปเดตอัตโนมัติทุก 15 วินาที <button className="secondary" onClick={reload}>รีเฟรช</button></div>}
-      {dataError && <p className="error" role="alert">อัปเดตข้อมูลไม่สำเร็จ: {dataError}</p>}
-      {directoryError && <p className="error" role="alert">โหลดรายชื่อผู้ใช้ไม่สำเร็จ: {directoryError} <button onClick={() => setRevision(n => n + 1)}>ลองอีกครั้ง</button></p>}
-      <Routes>{screens.map(screen => <Route key={screen.id} path={screen.path} element={available.some(item => item.id === screen.id) ? <div key={screen.id}>{pages[screen.id]}</div> : <Navigate to={home} replace />} />)}
-        <Route path="/no-access" element={available.length ? <Navigate to={home} replace /> : <Card>บัญชีนี้ยังไม่มีสิทธิ์หน้าจอ กรุณาติดต่อผู้ดูแลระบบ</Card>} />
-        <Route path="*" element={<Navigate to={home} replace />} />
-      </Routes>
-    </main>
-  </div>;
+};
+  return (
+    <div className="workspace">
+      <Sidebar me={me} screens={available} onLogout={onLogout} />
+      <main className="content">
+        <div className="page-heading">
+          <p className="eyebrow">MUT SHUTTLE BUS</p>
+          <h1>{current?.name || 'ระบบรถรับส่ง'}</h1>
+        </div>
+        {current && current.id !== 'SC01' && <div className="data-note sql">ข้อมูลจากฐานข้อมูล · อัปเดตอัตโนมัติทุก 15 วินาที <button className="secondary" onClick={reload}>รีเฟรช</button></div>}
+        {dataError && <p className="error" role="alert">อัปเดตข้อมูลไม่สำเร็จ: {dataError}</p>}
+        {directoryError && <p className="error" role="alert">โหลดรายชื่อผู้ใช้ไม่สำเร็จ: {directoryError} <button onClick={() => setRevision(n => n + 1)}>ลองอีกครั้ง</button></p>}
+        <Routes>
+          {screens.map(screen => <Route key={screen.id} path={screen.path} element={available.some(item => item.id === screen.id) ? <div key={screen.id}>{pages[screen.id]}</div> : <Navigate to={home} replace />} />)}
+          <Route path="/no-access" element={available.length ? <Navigate to={home} replace /> : <Card>บัญชีนี้ยังไม่มีสิทธิ์หน้าจอ กรุณาติดต่อผู้ดูแลระบบ</Card>} />
+          <Route path="*" element={<Navigate to={home} replace />} />
+        </Routes>
+      </main>
+    </div>
+  );
 }
 
 export default function App() {

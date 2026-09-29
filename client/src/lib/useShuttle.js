@@ -12,14 +12,16 @@ export function useShuttle() {
       if (active.current && requestId.current === id) { setData(next); setError(''); }
     } catch (err) { if (active.current && requestId.current === id) setError(err.message); }
   }, []);
+  const invalidateRequests = useCallback(() => { requestId.current++; }, []);
   useEffect(() => {
+    let disposed = false;
     active.current = true;
-    reload();
+    Promise.resolve().then(() => { if (!disposed) reload(); });
     const timer = setInterval(() => { if (!document.hidden) reload(); }, 15000);
     const visible = () => { if (!document.hidden) reload(); };
     document.addEventListener('visibilitychange', visible);
-    return () => { active.current = false; requestId.current++; clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
-  }, [reload]);
+    return () => { disposed = true; active.current = false; invalidateRequests(); clearInterval(timer); document.removeEventListener('visibilitychange', visible); };
+  }, [invalidateRequests, reload]);
   const dispatch = useCallback(async (type, payload) => {
     if (writing.current) throw new Error('กำลังบันทึกรายการก่อนหน้า กรุณารอสักครู่');
     writing.current = true;
