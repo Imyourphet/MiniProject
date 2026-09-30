@@ -118,13 +118,19 @@ function createApp(connect = getConnection) {
         if (user.password) invalidate(user.userId);
         res.json({ message: 'บันทึกผู้ใช้งานแล้ว' });
     });
-    app.delete('/api/users/:id', async (req, res) => {
-        if (req.params.id === req.user.userId) return res.status(400).json({ message: 'ลบบัญชีที่กำลังใช้งานไม่ได้' });
-        const result = await query('DELETE FROM USERS WHERE USER_ID = :userId', { userId: req.params.id }, { autoCommit: true });
-        if (!result.rowsAffected) return res.status(404).json({ message: 'ไม่พบผู้ใช้งาน' });
-        invalidate(req.params.id);
-        res.json({ message: 'ลบผู้ใช้งานแล้ว' });
-    });
+app.delete('/api/users/:id', async (req, res) => {
+  if (req.params.id === req.user.userId) return res.status(400).json({ message: 'ลบบัญชีที่กำลังใช้งานไม่ได้' });
+
+  // [เงื่อนไข SC01]: เช็คว่าคนขับคนนี้มีรอบรถผูกอยู่หรือไม่
+  const check = await query('SELECT COUNT(*) AS CNT FROM SCHEDULES WHERE DRIVER_ID = :userId', { userId: req.params.id });
+  const count = check.rows[0]?.[0] ?? check.rows[0]?.CNT ?? 0;
+  if (count > 0) return res.status(400).json({ message: `ลบไม่ได้! คนขับยังมีรอบรถอยู่ในระบบ (${count} รอบ)` });
+
+  const result = await query('DELETE FROM USERS WHERE USER_ID = :userId', { userId: req.params.id }, { autoCommit: true });
+  if (!result.rowsAffected) return res.status(404).json({ message: 'ไม่พบผู้ใช้งาน' });
+  invalidate(req.params.id);
+  res.json({ message: 'ลบผู้ใช้งานแล้ว' });
+});
     app.use('/api', (req, res) => res.status(404).json({ message: 'ไม่พบ API' }));
     app.use((error, req, res, next) => {
         if (res.headersSent) return next(error);
