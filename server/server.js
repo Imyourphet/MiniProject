@@ -121,7 +121,7 @@ function createApp(connect = getConnection) {
 app.delete('/api/users/:id', async (req, res) => {
   if (req.params.id === req.user.userId) return res.status(400).json({ message: 'ลบบัญชีที่กำลังใช้งานไม่ได้' });
 
-  // [เงื่อนไข SC01]: เช็คว่าคนขับคนนี้มีรอบรถผูกอยู่หรือไม่
+  // [เงื่อนไข SC01]: ตรวจสอบว่าคนขับยังมีรอบรถอยู่ในระบบหรือไม่
   const check = await query('SELECT COUNT(*) AS CNT FROM SCHEDULES WHERE DRIVER_ID = :userId', { userId: req.params.id });
   const count = check.rows[0]?.[0] ?? check.rows[0]?.CNT ?? 0;
   if (count > 0) return res.status(400).json({ message: `ลบไม่ได้! คนขับยังมีรอบรถอยู่ในระบบ (${count} รอบ)` });
