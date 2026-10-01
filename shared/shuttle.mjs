@@ -108,12 +108,29 @@ export function transition(current, action, user) {
       requireValue(Number.isInteger(item.seats) && item.seats > 0 && item.seats <= 6, 'จำนวนที่นั่งต้องอยู่ระหว่าง 1–6');
       totals[round.id] = (totals[round.id] || 0) + item.seats;
     }
-    for (const [id, total] of Object.entries(totals)) requireValue(seatsLeft(data, id) >= total, 'ที่นั่งไม่เพียงพอ กรุณาค้นหาใหม่');
+for (const [id, total] of Object.entries(totals)) requireValue(seatsLeft(data, id) >= total, 'ที่นั่งไม่เพียงพอ กรุณาค้นหาใหม่');
     let booking = p.bookingId && byId(data.bookings, p.bookingId);
     if (p.bookingId) requireValue(booking?.userId === user.userId, 'ไม่ใช่การจองของคุณ');
-    if (!booking) { booking = { id: nextId('B'), userId: user.userId, bookDate: todayISO() }; data.bookings.push(booking); }
+    if (!booking) { 
+      // ดึงเฉพาะตัวเลขออกมา แล้วเติมเลข 0 นำหน้าให้ครบ 5 หลักเสมอ (เช่น B00001, B00116)
+      const rawId = nextId('B');
+      const numPart = String(rawId).replace(/\D/g, '');
+      const formattedBookingId = `B${numPart.padStart(5, '0')}`;
+
+      booking = { id: formattedBookingId, userId: user.userId, bookDate: todayISO() }; 
+      data.bookings.push(booking); 
+    }
     let seq = Math.max(0, ...data.bookingDetails.filter(d => d.bookingId === booking.id).map(d => d.seq));
-    for (const item of p.items) { seq++; data.bookingDetails.push({ ...item, bookingId: booking.id, seq, qrcode: `QR-${booking.id}-${seq}`, statusId: BS.WAIT }); }
+    for (const item of p.items) { 
+      seq++; 
+      data.bookingDetails.push({ 
+        ...item, 
+        bookingId: booking.id, 
+        seq, 
+        qrcode: `QR-${booking.id}-${seq}`, 
+        statusId: BS.WAIT 
+      }); 
+    }
   } else if (type === 'cancelBooking') {
     const detail = data.bookingDetails.find(d => d.bookingId === p.bookingId && d.seq === p.seq);
     requireValue(detail && byId(data.bookings, p.bookingId).userId === user.userId, 'ไม่ใช่การจองของคุณ');
