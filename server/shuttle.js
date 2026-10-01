@@ -17,11 +17,13 @@ const SPECS = [
     ['bookings', 'BOOKING', { id: 'BOOKING_ID', bookDate: 'BOOK_DATE', userId: 'USER_ID' }, ['id']],
     ['bookingDetails', 'BOOKING_DETAIL', { bookingId: 'BOOKING_ID', seq: 'ITEM_SEQ', originStopId: 'ORIGIN_STOP_ID', roundId: 'ROUND_ID', destStopId: 'DEST_STOP_ID', seats: 'SEATS', qrcode: 'QR_CODE', statusId: 'STATUS_ID' }, ['bookingId', 'seq']],
 ];
+
 const STATUS_MAP = {
     bookingStatuses: { BS001: 'BS1', BS002: 'BS2', BS003: 'BS5', BS004: 'BS3', BS005: 'BS4' },
     roundStatuses: { BC001: 'RS1', BC002: 'RS2', BC003: 'RS3', BC004: 'RS4' },
     carStatuses: { CS001: 'CS1', CS002: 'CS3', CS003: 'CS2' },
 };
+
 const statusGroup = { bookingDetails: 'bookingStatuses', rounds: 'roundStatuses', cars: 'carStatuses' };
 const error400 = message => Object.assign(new Error(message), { status: 400 });
 const error403 = () => Object.assign(new Error('ไม่มีสิทธิ์ทำรายการนี้'), { status: 403 });
@@ -35,6 +37,7 @@ function normalizeDate(value) {
     if (year >= 2400) year -= 543;
     return `${year}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
 }
+
 function encodeStatus(collection, field, value) {
     const group = field === 'statusId' ? statusGroup[collection] : field === 'id' ? collection : null;
     if (!STATUS_MAP[group]) return value;
@@ -66,7 +69,6 @@ async function loadShuttle(connection) {
 function publicShuttle(data, user) {
     const result = structuredClone(data);
     delete result.userRefs;
-    // SQL has no SC10/SC11 records yet: these two management pages are fixed P1 features.
     for (const screen of [{ id: 'SC10', name: 'จัดการแผนก' }, { id: 'SC11', name: 'จัดการรถ' }]) {
         if (!result.screens.some(s => s.id === screen.id)) {
             result.screens.push({ ...screen, fixed: true });
@@ -115,29 +117,77 @@ function validateAction(data, action, user) {
     if (type === 'book' && (!Array.isArray(p.items) || p.items.length > 50)) throw error400('การจองต้องมีไม่เกิน 50 รายการ');
 }
 
+// แก้ไขฟังก์ชันบันทึกข้อมูล ป้องกันปัญหา Reserved Keyword และฟิลด์ที่ไม่ตรงกับ DB
 async function persistChanges(connection, before, after) {
     const keyOf = (item, keys) => JSON.stringify(keys.map(key => item[key]));
-    // Delete child rows before parents to respect the database foreign keys.
+    
+    // ลบรายการแถวลูกก่อนตามลำดับ Foreign Keys
     for (const [collection, table, fields, keys] of [...SPECS].reverse()) {
         const remaining = new Set(after[collection].map(item => keyOf(item, keys)));
-        for (const item of before[collection]) if (!remaining.has(keyOf(item, keys))) {
-            const binds = Object.fromEntries(keys.map(key => [key, encodeStatus(collection, key, item[key])]));
-            await connection.execute(`DELETE FROM ${table} WHERE ${keys.map(key => `${fields[key]} = :${key}`).join(' AND ')}`, binds);
+        for (const item of before[collection]) {
+            if (!remaining.has(keyOf(item, keys))) {
+                const whereClauses = [];
+                const binds = {};
+                keys.forEach(k => {
+                    const bindName = `b_${k}`;
+                    whereClauses.push(`${fields[k]} = :${bindName}`);
+                    binds[bindName] = encodeStatus(collection, k, item[k]);
+                });
+                await connection.execute(`DELETE FROM ${table} WHERE ${whereClauses.join(' AND ')}`, binds);
+            }
         }
     }
+
+    // Insert หรือ Update แถวข้อมูล
     for (const [collection, table, fields, keys] of SPECS) {
         const old = new Map(before[collection].map(item => [keyOf(item, keys), item]));
+        const validFields = Object.keys(fields);
+
         for (const item of after[collection]) {
             const previous = old.get(keyOf(item, keys));
-            const columns = Object.keys(fields);
+
             if (!previous) {
-                for (const key of keys) if (typeof item[key] === 'string' && item[key].length > 10) throw error400('รหัสที่สร้างยาวเกิน 10 ตัวอักษร');
-                await connection.execute(`INSERT INTO ${table} (${Object.values(fields).join(', ')}) VALUES (${columns.map(key => `:${key}`).join(', ')})`, Object.fromEntries(columns.map(key => [key, encodeStatus(collection, key, item[key])])));
+                // INSERT แถวใหม่
+                for (const key of keys) {
+                    if (typeof item[key] === 'string' && item[key].length > 10) throw error400('รหัสที่สร้างยาวเกิน 10 ตัวอักษร');
+                }
+                const insertColumns = [];
+                const bindParams = [];
+                const binds = {};
+
+                validFields.forEach(k => {
+                    insertColumns.push(fields[k]);
+                    bindParams.push(`:b_${k}`);
+                    binds[`b_${k}`] = encodeStatus(collection, k, item[k]);
+                });
+
+                await connection.execute(
+                    `INSERT INTO ${table} (${insertColumns.join(', ')}) VALUES (${bindParams.join(', ')})`,
+                    binds
+                );
             } else {
-                const changed = columns.filter(key => !keys.includes(key) && item[key] !== previous[key]);
+                // UPDATE แถวเดิม
+                const changed = validFields.filter(k => !keys.includes(k) && item[k] !== previous[k]);
                 if (!changed.length) continue;
-                const binds = Object.fromEntries([...changed, ...keys].map(key => [key, encodeStatus(collection, key, item[key])]));
-                await connection.execute(`UPDATE ${table} SET ${changed.map(key => `${fields[key]} = :${key}`).join(', ')} WHERE ${keys.map(key => `${fields[key]} = :${key}`).join(' AND ')}`, binds);
+
+                const setClauses = [];
+                const whereClauses = [];
+                const binds = {};
+
+                changed.forEach(k => {
+                    setClauses.push(`${fields[k]} = :val_${k}`);
+                    binds[`val_${k}`] = encodeStatus(collection, k, item[k]);
+                });
+
+                keys.forEach(k => {
+                    whereClauses.push(`${fields[k]} = :key_${k}`);
+                    binds[`key_${k}`] = encodeStatus(collection, k, item[k]);
+                });
+
+                await connection.execute(
+                    `UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`,
+                    binds
+                );
             }
         }
     }
@@ -145,24 +195,33 @@ async function persistChanges(connection, before, after) {
 
 async function applyAction(connection, input, authenticatedUser) {
     if (!input || typeof input.type !== 'string' || !input.payload || typeof input.payload !== 'object') throw error400('ข้อมูลคำสั่งไม่ถูกต้อง');
-    // Serialize shuttle writes across all Node processes. A bounded table lock is
-    // suitable for this mini-project; migrate to finer row locks when scaling.
+    
     await connection.execute('LOCK TABLE USERS IN SHARE MODE WAIT 5');
     await connection.execute(`LOCK TABLE ${SPECS.map(spec => spec[1]).join(', ')} IN EXCLUSIVE MODE WAIT 5`);
+    
     const before = await loadShuttle(connection);
     const user = before.userRefs.find(u => u.userId === authenticatedUser.userId);
     if (!user) throw error403();
+    
     const action = structuredClone(input);
     validateAction(before, action, user);
+    
     const { transition, activeSeats } = await import('../shared/shuttle.mjs');
     let after;
-    try { after = transition(before, action, user); } catch (error) { throw error400(error.message); }
+    try { 
+        after = transition(before, action, user); 
+    } catch (error) { 
+        throw error400(error.message); 
+    }
+
     for (const round of after.rounds) {
-        const schedule = after.schedules.find(s => s.id === round.scheduleId), car = after.cars.find(c => c.id === schedule?.carId);
+        const schedule = after.schedules.find(s => s.id === round.scheduleId);
+        const car = after.cars.find(c => c.id === schedule?.carId);
         const capacity = after.carTypes.find(t => t.id === car?.typeId)?.seats || 0;
         if (capacity < activeSeats(after, round.id)) throw error400('จำนวนที่นั่งรถน้อยกว่าจำนวนที่จองแล้ว');
         round.seats = capacity;
     }
+
     await persistChanges(connection, before, after);
     await connection.commit();
     return publicShuttle(after, user);
@@ -175,8 +234,11 @@ function installShuttle(app, connect) {
             connection = await connect();
             await connection.execute('SET TRANSACTION READ ONLY');
             res.json(publicShuttle(await loadShuttle(connection), req.user));
-        } finally { if (connection) await connection.close(); }
+        } finally { 
+            if (connection) await connection.close(); 
+        }
     });
+
     app.post('/api/shuttle/actions', async (req, res) => {
         let connection;
         try {
@@ -185,7 +247,10 @@ function installShuttle(app, connect) {
         } catch (error) {
             if (connection) await connection.rollback();
             throw error;
-        } finally { if (connection) await connection.close(); }
+        } finally { 
+            if (connection) await connection.close(); 
+        }
     });
 }
+
 module.exports = { installShuttle, loadShuttle, publicShuttle, applyAction, persistChanges, normalizeDate, SPECS, STATUS_MAP };
