@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ActionButton, ActionForm, Badge, Card, Field, Select, Table } from '../components/UI';
 import Scanner from '../components/Scanner';
-import { BS, RS, todayISO, fmtDate } from '../lib/dates';
-import { byId, fullName, minutes, routeStops, timeText, passengerStops } from '../lib/shuttle';
+import { BS, RS, todayISO, fmtDate } from '../lib/demoData';
+import { byId, fullName, minutes, routeStops, timeText } from '../lib/shuttle';
 
 function Live({ data, users, round, dispatch, canScan }) {
   const details = data.bookingDetails.filter(d => d.roundId === round.id && d.statusId !== BS.CANCEL);
@@ -24,32 +24,27 @@ export function Driver({ data, users, me, dispatch, closing = false, canScan }) 
       const schedule = byId(data.schedules, round.scheduleId), details = data.bookingDetails.filter(d => d.roundId === round.id);
       let time = minutes(schedule.time);
       const stops = routeStops(data, schedule.routeId).map(stop => { time += stop.travelTime; return { ...stop, time }; });
-      const countAt = (seq, key) => details.filter(d => d.statusId !== BS.CANCEL && passengerStops(data, schedule.routeId, d)[key] === seq).reduce((n, d) => n + d.seats, 0);
       const sum = status => details.filter(d => d.statusId === status).reduce((n, d) => n + d.seats, 0);
       return <Card key={round.id} title={`${round.id} · ${byId(data.routes, schedule.routeId).name}`}><p>{fmtDate(round.date)} · ออก {schedule.time} · รถ {byId(data.cars, schedule.carId).plate}</p><Badge>{byId(data.roundStatuses, round.statusId).name}</Badge>
         {!closing && round.statusId === RS.WAIT && <ActionButton disabled={date !== todayISO()} action={() => dispatch('start', { roundId: round.id })}>เริ่มงาน</ActionButton>}
         {closing && round.statusId === RS.RUN && <ActionButton className="danger" confirm="ปิดรอบนี้และบันทึกผู้ไม่มาเป็น No Show?" action={() => dispatch('close', { roundId: round.id })}>ปิดรอบ</ActionButton>}
         {round.statusId === RS.RUN && <Live data={data} users={users} round={round} dispatch={dispatch} canScan={canScan} />}
-        {!closing && <Table heads={['ลำดับ', 'จุดจอด', 'เวลาโดยประมาณ', 'ขึ้น', 'ลง']}>{stops.map(stop => <tr key={stop.seq}><td>{stop.seq}</td><td>{byId(data.stops, stop.stopId).name}</td><td>{timeText(stop.time)}</td><td>{countAt(stop.seq, 'originSeq')}</td><td>{countAt(stop.seq, 'destSeq')}</td></tr>)}</Table>}
+        {!closing && <Table heads={['ลำดับ', 'จุดจอด', 'เวลาโดยประมาณ', 'ขึ้น', 'ลง']}>{stops.map(stop => <tr key={stop.seq}><td>{stop.seq}</td><td>{byId(data.stops, stop.stopId).name}</td><td>{timeText(stop.time)}</td><td>{details.filter(d => d.statusId !== BS.CANCEL && d.originStopId === stop.stopId).reduce((n, d) => n + d.seats, 0)}</td><td>{details.filter(d => d.statusId !== BS.CANCEL && d.destStopId === stop.stopId).reduce((n, d) => n + d.seats, 0)}</td></tr>)}</Table>}
         {round.statusId === RS.CLOSED && <p className="success">ผู้เดินทาง {sum(BS.DONE)} คน · No Show {sum(BS.NOSHOW)} คน</p>}
       </Card>;
     })}</>;
 }
 
 export function ScanPage({ data, users, me, dispatch }) {
-  const scanning = useRef(false);
   const [selected, setSelected] = useState(''), [result, setResult] = useState(null), [log, setLog] = useState([]);
   const mine = data.rounds.filter(r => r.date === todayISO() && byId(data.schedules, r.scheduleId).empId === me.userId);
   const running = mine.filter(r => r.statusId === RS.RUN), waiting = mine.filter(r => r.statusId === RS.WAIT);
   const round = running.find(r => r.id === selected) || running[0];
-  async function scan(code) {
-    if (scanning.current) return;
-    scanning.current = true;
+  function scan(code) {
     let entry;
-    try { await dispatch('checkIn', { roundId: round.id, code }); entry = { ok: true, message: `เช็กอินสำเร็จ ${code}` }; }
+    try { dispatch('checkIn', { roundId: round.id, code }); entry = { ok: true, message: `เช็กอินสำเร็จ ${code}` }; }
     catch (error) { entry = { ok: false, message: error.message }; }
     setResult(entry); setLog(items => [{ ...entry, time: new Date().toLocaleTimeString('th-TH') }, ...items].slice(0, 6));
-    scanning.current = false;
   }
   if (!round) return <Card title="ยังไม่มีรอบที่กำลังเดินทาง"><p>เริ่มงานที่หน้าตารางงานคนขับก่อนสแกน QR</p>{waiting.map(r => <p key={r.id}>{r.id} · {byId(data.schedules, r.scheduleId).time}</p>)}</Card>;
   return <><Card title="สแกน QR ผู้โดยสาร"><Select label="รอบที่กำลังเดินทาง" empty={false} value={round.id} options={running.map(r => ({ id: r.id, name: `${r.id} · ${byId(data.routes, byId(data.schedules, r.scheduleId).routeId).name}` }))} onChange={event => { setSelected(event.target.value); setResult(null); }} />

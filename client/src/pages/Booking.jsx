@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActionButton, ActionForm, Badge, Card, Field, Select, Table } from '../components/UI';
 import BookingQR from '../components/QRCode';
-import { BS, RS, todayISO, fmtDate } from '../lib/dates';
+import { BS, RS, todayISO, fmtDate } from '../lib/demoData';
 import { byId, routeStops, seatsLeft } from '../lib/shuttle';
 
 export default function Booking({ data, me, dispatch }) {
@@ -19,13 +19,13 @@ export default function Booking({ data, me, dispatch }) {
   }}><Field label="วันเดินทาง" name="date" type="date" min={todayISO()} defaultValue={todayISO()} required />
     <Select label="จุดขึ้นรถ" name="originStopId" options={data.stops} defaultValue={data.stops[0]?.id} required />
     <Select label="จุดลงรถ" name="destStopId" options={data.stops} defaultValue={data.stops[1]?.id} required />
-    <Field label="จำนวนที่นั่ง" name="seats" type="number" min="1" max="6" defaultValue="1" required />
+    <Field label="จำนวนที่นั่ง" name="seats" type="number" min="1" max="4" defaultValue="1" required />
   </ActionForm>{search && <Table heads={['รอบเดินรถ', 'ที่นั่งว่าง', 'เลือก']} empty={!results.length}>{results.map(round => {
     const left = seatsLeft(data, round.id) - draft.filter(d => d.roundId === round.id).reduce((sum, d) => sum + d.seats, 0);
     return <tr key={round.id}><td>{roundLabel(round.id)}</td><td>{left}/{round.seats}</td><td><button disabled={left < search.seats} onClick={() => setDraft(items => [...items, { roundId: round.id, originStopId: search.originStopId, destStopId: search.destStopId, seats: search.seats }])}>{left < search.seats ? 'ที่นั่งไม่พอ' : '+ เพิ่มในการจอง'}</button></td></tr>;
   })}</Table>}</Card>
   <Card title={target ? `เพิ่มรายการในการจอง ${target}` : 'รายการที่จะจอง'}><Table heads={['รอบ', 'จุดขึ้น → ลง', 'ที่นั่ง', 'จัดการ']} empty={!draft.length}>{draft.map((item, i) => <tr key={i}><td>{roundLabel(item.roundId)}</td><td>{byId(data.stops, item.originStopId).name} → {byId(data.stops, item.destStopId).name}</td><td>{item.seats}</td><td><button className="danger" onClick={() => setDraft(items => items.filter((_, index) => index !== i))}>ลบ</button></td></tr>)}</Table>
-    <div className="actions"><ActionButton disabled={!draft.length} className="primary" action={async () => { await dispatch('book', { items: draft, bookingId: target || null }); setDraft([]); setTarget(''); setFilter('upcoming'); setMessage('ยืนยันการจองแล้ว'); }}>ยืนยันการจอง</ActionButton><button className="secondary" onClick={() => { setDraft([]); setTarget(''); }}>ล้างรายการ</button></div>
+    <div className="actions"><ActionButton disabled={!draft.length} className="primary" action={() => { dispatch('book', { items: draft, bookingId: target || null }); setDraft([]); setTarget(''); setFilter('upcoming'); setMessage('ยืนยันการจองตัวอย่างแล้ว'); }}>ยืนยันการจอง</ActionButton><button className="secondary" onClick={() => { setDraft([]); setTarget(''); }}>ล้างรายการ</button></div>
     {message && <p className="success" role="status">{message}</p>}
   </Card>
   <Card title="การจองของฉัน"><div className="tabs">{[['upcoming', 'กำลังจะถึง'], ['done', 'เสร็จแล้ว'], ['cancel', 'ยกเลิก']].map(([key, label]) => <button key={key} className={filter === key ? '' : 'secondary'} onClick={() => setFilter(key)}>{label}</button>)}</div>

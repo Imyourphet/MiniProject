@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActionButton, ActionForm, Card, Field, Select, Table } from '../components/UI';
 import { byId, fullName, activeSeats, duration, minutes, timeText, permissions } from '../lib/shuttle';
-import { todayISO, fmtDate } from '../lib/dates';
+import { todayISO, fmtDate } from '../lib/demoData';
 
 export default function Schedules({ data, users, dispatch }) {
   const [date, setDate] = useState(todayISO());
@@ -14,7 +14,7 @@ export default function Schedules({ data, users, dispatch }) {
   <Card title="ตารางเดินรถ"><Table heads={['รหัส', 'เส้นทาง', 'เวลา', 'คนขับ', 'รถ', 'จัดการ']} empty={!data.schedules.length}>
     {data.schedules.map(s => <tr key={s.id}><td>{s.id}</td><td>{byId(data.routes, s.routeId).name}</td><td>{s.time}–{timeText(minutes(s.time) + duration(data, s.routeId))}</td><td>{name(s.empId)}</td><td>{byId(data.cars, s.carId).plate}</td><td><ActionButton className="danger" confirm="ลบตารางและรอบที่ยังไม่ถูกใช้งาน?" action={() => dispatch('deleteSchedule', { id: s.id })}>ลบ</ActionButton></td></tr>)}
   </Table></Card>
-  <Card title="เปิดรอบเดินรถรายวัน"><ActionForm submit="เปิดรอบเดินรถ" onSubmit={async values => { await dispatch('openRounds', { date: values.date, days: Number(values.days) }); setDate(values.date); }}>
+  <Card title="เปิดรอบเดินรถรายวัน"><ActionForm submit="เปิดรอบเดินรถ" onSubmit={values => { dispatch('openRounds', { date: values.date, days: Number(values.days) }); setDate(values.date); }}>
     <Field label="วันเริ่มต้น" name="date" type="date" min={todayISO()} defaultValue={todayISO()} required /><Select label="เปิดต่อเนื่อง" name="days" defaultValue="1" empty={false} options={[1, 3, 7].map(n => ({ id: n, name: `${n} วัน` }))} />
   </ActionForm></Card>
   <Card title={`รอบวันที่ ${fmtDate(date)}`}><Field label="วันที่เดินรถ" type="date" value={date} onChange={event => setDate(event.target.value)} />
