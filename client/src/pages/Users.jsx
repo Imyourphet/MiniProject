@@ -139,10 +139,11 @@ export default function Users({ me, onChanged, onLogout }) {
             style={{ width: '260px', padding: '10px 16px', borderRadius: '999px', border: `1px solid ${colors.cardBorder}`, outline: 'none', fontSize: '13px', backgroundColor: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
           />
 
-          <div style={{ display: 'flex', gap: '6px' }}>
+           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <button type="button" onClick={() => setRoleFilter('ALL')} style={{ padding: '8px 16px', borderRadius: '999px', border: 'none', background: roleFilter === 'ALL' ? colors.pink : '#fff', color: roleFilter === 'ALL' ? '#fff' : '#64748b', fontSize: '12px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>ทั้งหมด ({users.length})</button>
             <button type="button" onClick={() => setRoleFilter('P1')} style={{ padding: '8px 16px', borderRadius: '999px', border: 'none', background: roleFilter === 'P1' ? colors.blue : '#fff', color: roleFilter === 'P1' ? '#fff' : '#64748b', fontSize: '12px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>Admin</button>
             <button type="button" onClick={() => setRoleFilter('P2')} style={{ padding: '8px 16px', borderRadius: '999px', border: 'none', background: roleFilter === 'P2' ? colors.pink : '#fff', color: roleFilter === 'P2' ? '#fff' : '#64748b', fontSize: '12px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>คนขับรถ</button>
+             <button type="button" onClick={() => setRoleFilter('P3')} style={{ padding: '8px 16px', borderRadius: '999px', border: 'none', background: roleFilter === 'P3' ? colors.pink : '#fff', color: roleFilter === 'P3' ? '#fff' : '#64748b', fontSize: '12px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>ผู้ใช้งานทั่วไป</button>
           </div>
         </div>
 
