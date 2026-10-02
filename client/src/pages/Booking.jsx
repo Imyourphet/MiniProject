@@ -1,38 +1,267 @@
-import { useState } from 'react';
-import { ActionButton, ActionForm, Badge, Card, Field, Select, Table } from '../components/UI';
-import BookingQR from '../components/QRCode';
-import { BS, RS, todayISO, fmtDate } from '../lib/dates';
-import { byId, routeStops, seatsLeft } from '../lib/shuttle';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode.react';
 
-export default function Booking({ data, me, dispatch }) {
-  const [search, setSearch] = useState(null), [draft, setDraft] = useState([]), [target, setTarget] = useState(''), [filter, setFilter] = useState('upcoming'), [message, setMessage] = useState('');
-  const roundLabel = id => { const r = byId(data.rounds, id), s = byId(data.schedules, r.scheduleId); return `${fmtDate(r.date)} ${s.time || ''} · ${byId(data.routes, s.routeId).name || '-'}`; };
-  const results = search ? data.rounds.filter(r => {
-    const s = byId(data.schedules, r.scheduleId), stops = routeStops(data, s.routeId), origin = stops.find(stop => stop.stopId === search.originStopId);
-    return r.date === search.date && r.statusId === RS.WAIT && (r.date !== todayISO() || s.time > new Date().toTimeString().slice(0, 5)) && origin && stops.some(stop => stop.stopId === search.destStopId && stop.seq > origin.seq);
-  }) : [];
-  const matches = detail => filter === 'upcoming' ? [BS.WAIT, BS.BOARD].includes(detail.statusId) : filter === 'done' ? [BS.DONE, BS.NOSHOW].includes(detail.statusId) : detail.statusId === BS.CANCEL;
-  const groups = data.bookings.filter(b => b.userId === me.userId).map(b => ({ ...b, details: data.bookingDetails.filter(d => d.bookingId === b.id && matches(d)) })).filter(b => b.details.length).reverse();
-  return <><Card title="ค้นหารอบเดินรถ"><ActionForm submit="ค้นหารอบ" onSubmit={values => {
-    if (values.originStopId === values.destStopId) throw new Error('จุดขึ้นและจุดลงต้องต่างกัน');
-    setSearch({ ...values, seats: Number(values.seats) }); setMessage('');
-  }}><Field label="วันเดินทาง" name="date" type="date" min={todayISO()} defaultValue={todayISO()} required />
-    <Select label="จุดขึ้นรถ" name="originStopId" options={data.stops} defaultValue={data.stops[0]?.id} required />
-    <Select label="จุดลงรถ" name="destStopId" options={data.stops} defaultValue={data.stops[1]?.id} required />
-    <Field label="จำนวนที่นั่ง" name="seats" type="number" min="1" max="6" defaultValue="1" required />
-  </ActionForm>{search && <Table heads={['รอบเดินรถ', 'ที่นั่งว่าง', 'เลือก']} empty={!results.length}>{results.map(round => {
-    const left = seatsLeft(data, round.id) - draft.filter(d => d.roundId === round.id).reduce((sum, d) => sum + d.seats, 0);
-    return <tr key={round.id}><td>{roundLabel(round.id)}</td><td>{left}/{round.seats}</td><td><button disabled={left < search.seats} onClick={() => setDraft(items => [...items, { roundId: round.id, originStopId: search.originStopId, destStopId: search.destStopId, seats: search.seats }])}>{left < search.seats ? 'ที่นั่งไม่พอ' : '+ เพิ่มในการจอง'}</button></td></tr>;
-  })}</Table>}</Card>
-  <Card title={target ? `เพิ่มรายการในการจอง ${target}` : 'รายการที่จะจอง'}><Table heads={['รอบ', 'จุดขึ้น → ลง', 'ที่นั่ง', 'จัดการ']} empty={!draft.length}>{draft.map((item, i) => <tr key={i}><td>{roundLabel(item.roundId)}</td><td>{byId(data.stops, item.originStopId).name} → {byId(data.stops, item.destStopId).name}</td><td>{item.seats}</td><td><button className="danger" onClick={() => setDraft(items => items.filter((_, index) => index !== i))}>ลบ</button></td></tr>)}</Table>
-    <div className="actions"><ActionButton disabled={!draft.length} className="primary" action={async () => { await dispatch('book', { items: draft, bookingId: target || null }); setDraft([]); setTarget(''); setFilter('upcoming'); setMessage('ยืนยันการจองแล้ว'); }}>ยืนยันการจอง</ActionButton><button className="secondary" onClick={() => { setDraft([]); setTarget(''); }}>ล้างรายการ</button></div>
-    {message && <p className="success" role="status">{message}</p>}
-  </Card>
-  <Card title="การจองของฉัน"><div className="tabs">{[['upcoming', 'กำลังจะถึง'], ['done', 'เสร็จแล้ว'], ['cancel', 'ยกเลิก']].map(([key, label]) => <button key={key} className={filter === key ? '' : 'secondary'} onClick={() => setFilter(key)}>{label}</button>)}</div>
-    {!groups.length && <p className="muted">ยังไม่มีรายการ</p>}{groups.map(booking => <article className="booking-group" key={booking.id}><div className="section-heading"><h3>{booking.id} · จองเมื่อ {fmtDate(booking.bookDate)}</h3>{filter === 'upcoming' && <button className="secondary" onClick={() => { setTarget(booking.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>เพิ่มรายการ</button>}</div>
-      {booking.details.map(detail => <div className="booking-detail" key={detail.seq}><h4>รายการที่ {detail.seq} · {roundLabel(detail.roundId)}</h4><p>{byId(data.stops, detail.originStopId).name} → {byId(data.stops, detail.destStopId).name} · {detail.seats} ที่นั่ง</p><Badge>{byId(data.bookingStatuses, detail.statusId).name}</Badge>
-        {detail.statusId === BS.WAIT && <><BookingQR value={detail.qrcode} /><ActionButton className="danger" confirm="ยกเลิกรายการจองนี้?" action={() => dispatch('cancelBooking', { bookingId: booking.id, seq: detail.seq })}>ยกเลิกรายการนี้</ActionButton></>}
-      </div>)}
-    </article>)}
-  </Card></>;
-}
+const Booking = () => {
+  // ข้อมูลจำลอง Master Data
+  const routesData = [
+    { id: 1, name: 'เส้นทางที่ 1: มหาวิทยาลัย - โลตัส - รพ.หนองจอก - Big C' },
+    { id: 2, name: 'เส้นทางที่ 2: มหาวิทยาลัย - โลตัส - สวนสาธารณะ - ร้านส้มตำป้านาง' },
+    { id: 3, name: 'เส้นทางที่ 3: Big C - โลตัส - สวนสาธารณะ - มหาวิทยาลัย' }
+  ];
+
+  const stopPointsData = [
+    'มหาวิทยาลัยเทคโนโลยีมหานคร',
+    'โลตัสหนองจอก',
+    'โรงพยาบาลหนองจอก',
+    'Big C หนองจอก',
+    'สวนสาธารณะหนองจอก',
+    'ร้านส้มตำป้านาง'
+  ];
+
+  // รอบเดินรถ (ตัวอย่างข้อมูล capacity และเวลาออก)
+  const [schedules, setSchedules] = useState([
+    { id: 101, routeId: 1, time: '09:30', maxSeats: 9, bookedSeats: 8, departureTime: new Date(Date.now() + 60 * 60 * 1000) }, // อีก 1 ชม.
+    { id: 102, routeId: 1, time: '11:00', maxSeats: 20, bookedSeats: 5, departureTime: new Date(Date.now() + 180 * 60 * 1000) },
+    { id: 103, routeId: 1, time: '13:00', maxSeats: 20, bookedSeats: 20, departureTime: new Date(Date.now() + 300 * 60 * 1000) },
+    { id: 104, routeId: 2, time: '09:30', maxSeats: 9, bookedSeats: 2, departureTime: new Date(Date.now() + 10 * 60 * 1000) } // อีก 10 นาที (จะไม่แสดงเพราะ < 20 นาที)
+  ]);
+
+  // Form State
+  const [selectedRoute, setSelectedRoute] = useState('');
+  const [pickupStop, setPickupStop] = useState('');
+  const [dropoffStop, setDropoffStop] = useState('');
+  const [seatsCount, setSeatsCount] = useState(1);
+  const [selectedSchedule, setSelectedSchedule] = useState('');
+  const [availableSchedules, setAvailableSchedules] = useState([]);
+
+  // Filter & History State
+  const [bookingsHistory, setBookingsHistory] = useState([]);
+  const [filterStatus, setFilterStatus] = useState('upcoming'); // upcoming, completed, cancelled
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // กรองรอบรถตามเงื่อนไข 20 นาที และที่นั่งว่าง
+  useEffect(() => {
+    if (selectedRoute) {
+      const now = new Date();
+      const filtered = schedules.filter(s => {
+        if (s.routeId !== parseInt(selectedRoute)) return false;
+        
+        // เช็กเวลาล่วงหน้า >= 20 นาที
+        const diffMinutes = (new Date(s.departureTime) - now) / (1000 * 60);
+        if (diffMinutes < 20) return false;
+
+        return true;
+      });
+      setAvailableSchedules(filtered);
+    } else {
+      setAvailableSchedules([]);
+    }
+  }, [selectedRoute, schedules]);
+
+  // จัดการการจองรถ
+  const handleBooking = (e) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    if (!pickupStop || !dropoffStop || pickupStop === dropoffStop) {
+      setErrorMessage('กรุณาเลือกจุดขึ้นและจุดลงให้ถูกต้อง (ห้ามเป็นจุดเดียวกัน)');
+      return;
+    }
+
+    if (!selectedSchedule) {
+      setErrorMessage('กรุณาเลือกรอบเวลาเดินรถ');
+      return;
+    }
+
+    // เงื่อนไข: จองได้ไม่เกิน 4 ที่นั่ง
+    if (seatsCount < 1 || seatsCount > 4) {
+      setErrorMessage('จำกัดการจองสูงสุดไม่เกิน 4 ที่นั่งต่อครั้ง');
+      return;
+    }
+
+    const scheduleObj = schedules.find(s => s.id === parseInt(selectedSchedule));
+    const seatsLeft = scheduleObj.maxSeats - scheduleObj.bookedSeats;
+
+    // เงื่อนไข: ตรวจสอบที่นั่งว่างเพียงพอ
+    if (seatsCount > seatsLeft) {
+      setErrorMessage(`ที่นั่งคงเหลือไม่พอ (ว่างเพียง ${seatsLeft} ที่นั่ง)`);
+      return;
+    }
+
+    // ทำรายการจองสำเร็จ
+    const newBooking = {
+      bookingId: `BK-${Date.now()}`,
+      routeId: selectedRoute,
+      pickupStop,
+      dropoffStop,
+      time: scheduleObj.time,
+      seats: seatsCount,
+      scheduleId: scheduleObj.id,
+      status: 'upcoming', // upcoming, completed, cancelled
+      createdAt: new Date().toLocaleString('th-TH')
+    };
+
+    // อัปเดตจำนวนที่นั่งที่ถูกจองในรอบนั้น
+    setSchedules(prev => prev.map(s => {
+      if (s.id === scheduleObj.id) {
+        return { ...s, bookedSeats: s.bookedSeats + parseInt(seatsCount) };
+      }
+      return s;
+    }));
+
+    setBookingsHistory([newBooking, ...bookingsHistory]);
+    alert('จองรถสำเร็จเรียบร้อย!');
+    
+    // Reset Form
+    setSelectedSchedule('');
+    setSeatsCount(1);
+  };
+
+  // ยกเลิกการจองและคืนจำนวนที่นั่ง
+  const handleCancelBooking = (bookingId, scheduleId, seats) => {
+    if (window.confirm('คุณต้องการยกเลิกการจองนี้ใช่หรือไม่?')) {
+      // คืนที่นั่งเข้าสู่ระบบ
+      setSchedules(prev => prev.map(s => {
+        if (s.id === scheduleId) {
+          return { ...s, bookedSeats: Math.max(0, s.bookedSeats - seats) };
+        }
+        return s;
+      }));
+
+      // อัปเดตสถานะการจอง
+      setBookingsHistory(prev => prev.map(b => {
+        if (b.bookingId === bookingId) {
+          return { ...b, status: 'cancelled' };
+        }
+        return b;
+      }));
+    }
+  };
+
+  const filteredHistory = bookingsHistory.filter(b => b.status === filterStatus);
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
+      <h2>🚌 ระบบจองรถรับส่ง (MUT Shuttle Bus)</h2>
+
+      {/* ฟอร์มการจอง */}
+      <form onSubmit={handleBooking} style={{ background: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
+        <h3>ระบุรายละเอียดการเดินทาง</h3>
+        
+        {errorMessage && <p style={{ color: 'red', fontWeight: 'bold' }}>{errorMessage}</p>}
+
+        <div style={{ marginBottom: '10px' }}>
+          <label>เลือกเส้นทาง: </label>
+          <select value={selectedRoute} onChange={(e) => setSelectedRoute(e.target.value)} required style={{ padding: '8px', width: '100%' }}>
+            <option value="">-- กรุณาเลือกเส้นทาง --</option>
+            {routesData.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <div style={{ flex: 1 }}>
+            <label>จุดขึ้นรถ: </label>
+            <select value={pickupStop} onChange={(e) => setPickupStop(e.target.value)} required style={{ padding: '8px', width: '100%' }}>
+              <option value="">-- เลือกจุดขึ้น --</option>
+              {stopPointsData.map((stop, idx) => (
+                <option key={idx} value={stop}>{stop}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <label>จุดลงรถ: </label>
+            <select value={dropoffStop} onChange={(e) => setDropoffStop(e.target.value)} required style={{ padding: '8px', width: '100%' }}>
+              <option value="">-- เลือกจุดลง --</option>
+              {stopPointsData.map((stop, idx) => (
+                <option key={idx} value={stop}>{stop}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <label>รอบเวลาเดินรถ (ต้องจองก่อนอย่างน้อย 20 นาที): </label>
+          <select value={selectedSchedule} onChange={(e) => setSelectedSchedule(e.target.value)} required style={{ padding: '8px', width: '100%' }}>
+            <option value="">-- เลือกรอบเวลา --</option>
+            {availableSchedules.map(s => {
+              const seatsLeft = s.maxSeats - s.bookedSeats;
+              return (
+                <option key={s.id} value={s.id} disabled={seatsLeft <= 0}>
+                  รอบ {s.time} น. {seatsLeft <= 0 ? '(เต็มแล้ว)' : `(ว่าง ${seatsLeft}/${s.maxSeats} ที่นั่ง)`}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>จำนวนที่นั่ง (สูงสุด 4 คน): </label>
+          <input 
+            type="number" 
+            min="1" 
+            max="4" 
+            value={seatsCount} 
+            onChange={(e) => setSeatsCount(parseInt(e.target.value) || 1)} 
+            style={{ padding: '8px', width: '100px', marginLeft: '10px' }}
+          />
+        </div>
+
+        <button type="submit" style={{ padding: '10px 20px', background: '#0056b3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          ยืนยันการจองรถ
+        </button>
+      </form>
+
+      {/* ประวัติการจองและ QR Code */}
+      <div>
+        <h3>รายการจองของคุณ</h3>
+        <div style={{ marginBottom: '15px' }}>
+          <button onClick={() => setFilterStatus('upcoming')} style={{ fontWeight: filterStatus === 'upcoming' ? 'bold' : 'normal', marginRight: '10px' }}>
+            กำลังจะถึง
+          </button>
+          <button onClick={() => setFilterStatus('completed')} style={{ fontWeight: filterStatus === 'completed' ? 'bold' : 'normal', marginRight: '10px' }}>
+            เดินทางแล้ว
+          </button>
+          <button onClick={() => setFilterStatus('cancelled')} style={{ fontWeight: filterStatus === 'cancelled' ? 'bold' : 'normal' }}>
+            ยกเลิกแล้ว
+          </button>
+        </div>
+
+        {filteredHistory.length === 0 ? (
+          <p>ไม่มีรายการในหมวดหมู่นี้</p>
+        ) : (
+          filteredHistory.map(item => (
+            <div key={item.bookingId} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', marginBottom: '15px', display: 'flex', justifyContent: 'space-[#12]between', alignItems: 'center' }}>
+              <div>
+                <p><strong>รหัสจอง:</strong> {item.bookingId}</p>
+                <p><strong>ขึ้นที่:</strong> {item.pickupStop} ➡️ <strong>ลงที่:</strong> {item.dropoffStop}</p>
+                <p><strong>เวลารถออก:</strong> {item.time} น. ({item.seats} ที่นั่ง)</p>
+                <p><small>ทำรายการเมื่อ: {item.createdAt}</small></p>
+
+                {item.status === 'upcoming' && (
+                  <button 
+                    onClick={() => handleCancelBooking(item.bookingId, item.scheduleId, item.seats)}
+                    style={{ background: '#d9534f', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginTop: '5px' }}
+                  >
+                    ยกเลิกการจอง
+                  </button>
+                )}
+              </div>
+
+              {item.status === 'upcoming' && (
+                <div style={{ textAlign: 'center' }}>
+                  <QRCode value={JSON.stringify({ bookingId: item.bookingId, seats: item.seats })} size={100} />
+                  <p style={{ fontSize: '12px', marginTop: '5px' }}>สแกนเพื่อขึ้นรถ</p>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Booking;
