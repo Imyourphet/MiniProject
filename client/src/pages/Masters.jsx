@@ -23,9 +23,26 @@ export function Cars(props) {
     <MasterEditor {...props} collection="carTypes" title="ประเภทรถ" fields={[{ name: 'name', label: 'ชื่อประเภท' }, { name: 'seats', label: 'จำนวนที่นั่ง', type: 'number', min: 1, defaultValue: 9 }]} /></>;
 }
 export function Permissions(props) {
-  const { data, dispatch, users } = props;
-  return <><p className="muted">การกำหนดสิทธิ์นี้มีผลเฉพาะหน้าตัวอย่างในเบราว์เซอร์ สิทธิ์จัดการผู้ใช้ Oracle ยังคงเป็น P1</p>
+  const { data, dispatch, users, me } = props;
+  return <>
+    <p className="muted">การกำหนดสิทธิ์นี้มีผลเฉพาะหน้าตัวอย่างในเบราว์เซอร์ สิทธิ์จัดการผู้ใช้ Oracle ยังคงเป็น P1</p>
     <MasterEditor {...props} collection="positions" title="ตำแหน่งตัวอย่าง" fields={[{ name: 'name', label: 'ชื่อตำแหน่ง' }]} inUse={id => users.some(user => user.posId === id)} />
-    {data.positions.map(position => <Card key={position.id} title={`${position.id} · ${position.name}`}><div className="permission-grid">{data.screens.map(screen => <label className="check" key={screen.id}><input type="checkbox" disabled={position.id === 'P1' && ['SC01', 'SC02'].includes(screen.id)} checked={data.perms.some(p => p.posId === position.id && p.screenId === screen.id)} onChange={event => dispatch('permission', { posId: position.id, screenId: screen.id, on: event.target.checked })} />{screen.name}</label>)}</div></Card>)}
+    {data.positions.map(position => (
+      <Card key={position.id} title={`${position.id} · ${position.name}`}>
+        <div className="permission-grid">
+          {data.screens.map(screen => (
+            <label className="check" key={screen.id}>
+              <input
+                type="checkbox"
+                disabled={position.id === me.posId && screen.id === 'SC02'}
+                checked={data.perms.some(p => p.posId === position.id && p.screenId === screen.id)}
+                onChange={event => dispatch('permission', { posId: position.id, screenId: screen.id, on: event.target.checked })}
+              />
+              {screen.name}
+            </label>
+          ))}
+        </div>
+      </Card>
+    ))}
   </>;
 }

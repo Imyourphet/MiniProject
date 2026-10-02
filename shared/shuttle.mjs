@@ -46,9 +46,9 @@ export function transition(current, action, user) {
     requireValue(['departments', 'positions', 'stops', 'routes', 'carTypes', 'cars'].includes(p.collection), 'ประเภทข้อมูลไม่ถูกต้อง');
     const used = p.collection === 'routes' ? data.schedules.some(s => s.routeId === p.id)
       : p.collection === 'stops' ? data.routeStops.some(s => s.stopId === p.id) || data.bookingDetails.some(d => d.originStopId === p.id || d.destStopId === p.id)
-      : p.collection === 'cars' ? data.schedules.some(s => s.carId === p.id)
-      : p.collection === 'carTypes' ? data.cars.some(c => c.typeId === p.id)
-      : p.inUse;
+        : p.collection === 'cars' ? data.schedules.some(s => s.carId === p.id)
+          : p.collection === 'carTypes' ? data.cars.some(c => c.typeId === p.id)
+            : p.inUse;
     requireValue(!used && !(p.collection === 'positions' && ['P1', 'P2', 'P3'].includes(p.id)), 'มีข้อมูลอื่นใช้งานรายการนี้อยู่');
     data[p.collection] = data[p.collection].filter(item => item.id !== p.id);
     if (p.collection === 'routes') data.routeStops = data.routeStops.filter(s => s.routeId !== p.id);
@@ -56,8 +56,7 @@ export function transition(current, action, user) {
   } else if (type === 'permission') {
     admin();
     requireValue(!(p.on && p.posId !== 'P1' && ['SC01', 'SC02', 'SC03', 'SC04', 'SC05', 'SC10', 'SC11'].includes(p.screenId)), 'หน้าจัดการข้อมูลสงวนไว้สำหรับ P1');
-    requireValue(!(p.posId === 'P1' && ['SC01', 'SC02'].includes(p.screenId) && !p.on), 'ต้องคงเมนูผู้ใช้และสิทธิ์ของผู้ดูแลไว้');
-    data.perms = data.perms.filter(pm => !(pm.posId === p.posId && pm.screenId === p.screenId));
+    requireValue(!(p.posId === user.posId && p.screenId === 'SC02' && !p.on), 'เอาสิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเองออกไม่ได้'); data.perms = data.perms.filter(pm => !(pm.posId === p.posId && pm.screenId === p.screenId));
     if (p.on) data.perms.push({ posId: p.posId, screenId: p.screenId, seq: Math.max(0, ...data.perms.filter(pm => pm.posId === p.posId).map(pm => pm.seq)) + 1 });
   } else if (type === 'addStop') {
     admin();
@@ -108,28 +107,28 @@ export function transition(current, action, user) {
       requireValue(Number.isInteger(item.seats) && item.seats > 0 && item.seats <= 6, 'จำนวนที่นั่งต้องอยู่ระหว่าง 1–6');
       totals[round.id] = (totals[round.id] || 0) + item.seats;
     }
-for (const [id, total] of Object.entries(totals)) requireValue(seatsLeft(data, id) >= total, 'ที่นั่งไม่เพียงพอ กรุณาค้นหาใหม่');
+    for (const [id, total] of Object.entries(totals)) requireValue(seatsLeft(data, id) >= total, 'ที่นั่งไม่เพียงพอ กรุณาค้นหาใหม่');
     let booking = p.bookingId && byId(data.bookings, p.bookingId);
     if (p.bookingId) requireValue(booking?.userId === user.userId, 'ไม่ใช่การจองของคุณ');
-    if (!booking) { 
+    if (!booking) {
       // ดึงเฉพาะตัวเลขออกมา แล้วเติมเลข 0 นำหน้าให้ครบ 5 หลักเสมอ (เช่น B00001, B00116)
       const rawId = nextId('B');
       const numPart = String(rawId).replace(/\D/g, '');
       const formattedBookingId = `B${numPart.padStart(5, '0')}`;
 
-      booking = { id: formattedBookingId, userId: user.userId, bookDate: todayISO() }; 
-      data.bookings.push(booking); 
+      booking = { id: formattedBookingId, userId: user.userId, bookDate: todayISO() };
+      data.bookings.push(booking);
     }
     let seq = Math.max(0, ...data.bookingDetails.filter(d => d.bookingId === booking.id).map(d => d.seq));
-    for (const item of p.items) { 
-      seq++; 
-      data.bookingDetails.push({ 
-        ...item, 
-        bookingId: booking.id, 
-        seq, 
-        qrcode: `QR-${booking.id}-${seq}`, 
-        statusId: BS.WAIT 
-      }); 
+    for (const item of p.items) {
+      seq++;
+      data.bookingDetails.push({
+        ...item,
+        bookingId: booking.id,
+        seq,
+        qrcode: `QR-${booking.id}-${seq}`,
+        statusId: BS.WAIT
+      });
     }
   } else if (type === 'cancelBooking') {
     const detail = data.bookingDetails.find(d => d.bookingId === p.bookingId && d.seq === p.seq);
