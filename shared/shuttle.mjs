@@ -54,9 +54,9 @@ export function transition(current, action, user) {
     if (p.collection === 'routes') data.routeStops = data.routeStops.filter(s => s.routeId !== p.id);
     if (p.collection === 'positions') data.perms = data.perms.filter(pm => pm.posId !== p.id);
   } else if (type === 'permission') {
-    admin();
-    requireValue(!(p.on && p.posId !== 'P1' && ['SC01', 'SC02', 'SC03', 'SC04', 'SC05', 'SC10', 'SC11'].includes(p.screenId)), 'หน้าจัดการข้อมูลสงวนไว้สำหรับ P1');
-    requireValue(!(p.posId === user.posId && p.screenId === 'SC02' && !p.on), 'เอาสิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเองออกไม่ได้'); data.perms = data.perms.filter(pm => !(pm.posId === p.posId && pm.screenId === p.screenId));
+    requireValue(can('SC02'), 'ไม่มีสิทธิ์กำหนดสิทธิ์');
+    requireValue(!(p.posId === user.posId && p.screenId === 'SC02' && !p.on), 'เอาสิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเองออกไม่ได้');
+    data.perms = data.perms.filter(pm => !(pm.posId === p.posId && pm.screenId === p.screenId));
     if (p.on) data.perms.push({ posId: p.posId, screenId: p.screenId, seq: Math.max(0, ...data.perms.filter(pm => pm.posId === p.posId).map(pm => pm.seq)) + 1 });
   } else if (type === 'addStop') {
     admin();
