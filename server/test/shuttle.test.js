@@ -18,7 +18,7 @@ test('date adapter handles actual Oracle string date formats', () => {
 });
 
 test('Oracle mappings, transactions, rollback, privacy and seat contention', async t => {
-    const { createDemoData, todayISO, addDays } = await import('../../client/src/lib/demoData.js');
+    const { createDemoData, todayISO, addDays } = await import('../../shared/test/fixtures.mjs');
     const db = memoryDatabase(createDemoData(), users);
     const admin = { userId: 'U001', posId: 'P1' }, passenger = { userId: 'U005', posId: 'P3' };
     async function read() { const c = await db.connect(); try { return await loadShuttle(c); } finally { await c.close(); } }
@@ -51,11 +51,15 @@ test('Oracle mappings, transactions, rollback, privacy and seat contention', asy
     });
     await t.test('two concurrent bookings cannot take the same last seats', async () => {
         const current = await read(), round = current.rounds.find(r => r.date === addDays(todayISO(), 1));
-        const payload = { items: [{ roundId: round.id, originStopId: 'S001', destStopId: 'S002', seats: 6 }] };
+        const payload = { items: [{ roundId: round.id, originStopId: 'S001', destStopId: 'S002', seats: 4 }] };
+        // Reserve four first, leaving six seats: only one concurrent group of four fits.
+        await act('book', payload, passenger);
         const outcomes = await Promise.allSettled([act('book', payload, passenger), act('book', payload, { userId: 'U006', posId: 'P3' })]);
         assert.equal(outcomes.filter(o => o.status === 'fulfilled').length, 1);
         const persisted = await read();
-        assert.equal(persisted.bookingDetails.filter(d => d.roundId === round.id).reduce((n, d) => n + d.seats, 0), 8);
+        assert.equal(persisted.bookingDetails.filter(d => d.roundId === round.id).reduce((n, d) => n + d.seats, 0), 10);
+        const rejected = outcomes.find(o => o.status === 'rejected');
+        assert.match(rejected.reason.message, /ที่นั่งไม่เพียงพอ/);
         assert.ok(db.logs.some(log => log.sql.startsWith('LOCK TABLE') && log.sql.includes('IN EXCLUSIVE MODE WAIT 5')));
         const newDetail = db.tables().BOOKING_DETAIL.find(d => d.BOOKING_ID.startsWith('B1'));
         assert.equal(newDetail.STATUS_ID, 'BS001');

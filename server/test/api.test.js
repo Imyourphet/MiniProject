@@ -8,16 +8,22 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
         ['U002', ['U002', 'Test', 'Driver', '0300000000', 'D0002', 'P2', 'test-driver']],
     ]);
     const calls = [];
+    const grants = new Set(['P1:SC01']);
     let opened = 0, closed = 0, broken = false;
     const app = createApp(async () => {
         opened++;
         return {
-            async execute(sql, binds, options) {
+            async execute(sql, binds = {}, options) {
                 calls.push({ sql, binds, options });
                 if (broken) throw new Error('simulated connection error');
+                if (sql.startsWith('LOCK TABLE')) return {};
+                if (sql === 'SELECT USER_ID FROM USERS') return { rows: [...records.keys()].map(id => [id]) };
+                if (sql.startsWith('SELECT POS_ID FROM USERS')) return { rows: records.has(binds.userId) ? [[records.get(binds.userId)[5]]] : [] };
+                if (sql.startsWith('SELECT SCREEN_ID FROM PERMISSION')) return { rows: grants.has(`${binds.posId}:${binds.screenId}`) ? [[binds.screenId]] : [] };
+                if (sql.startsWith('SELECT COUNT(*) AS CNT FROM SCHEDULE WHERE USER_ID')) return { rows: [[binds.userId === 'U002' ? 2 : 0]] };
                 if (sql.startsWith('SELECT')) {
                     const rows = binds.userId ? (records.has(binds.userId) ? [records.get(binds.userId)] : []) : [...records.values()];
-                    return { rows: rows.map(row => sql.includes('FIRST_NAME, LAST_NAME, POS_ID') ? [row[0], row[1], row[2], row[5]] : sql.includes(', PASSWORD FROM') ? [...row] : row.slice(0, 6)) };
+                    return { rows: rows.map(row => sql.includes('FIRST_NAME, LAST_NAME, POS_ID') ? [row[0], row[1], row[2], row[5], row[4]] : sql.includes(', PASSWORD FROM') ? [...row] : row.slice(0, 6)) };
                 }
                 const old = records.get(binds.userId);
                 if (sql.startsWith('INSERT')) {
@@ -29,10 +35,12 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
                 } else if (sql.startsWith('DELETE')) {
                     if (!records.delete(binds.userId)) return { rowsAffected: 0 };
                 }
-                assert.equal(options.autoCommit, true);
+                if (!sql.startsWith('INSERT')) assert.equal(options.autoCommit, true);
                 return { rowsAffected: 1 };
             },
             async close() { closed++; },
+            async commit() {},
+            async rollback() {},
         };
     });
     const server = app.listen(0, '127.0.0.1');
@@ -65,25 +73,38 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
         assert.equal(directory.body[0].phone, undefined);
         assert.equal(directory.body[0].password, undefined);
     });
-    await t.test('create, edit retaining password, required fields, leading zeroes and duplicate IDs', async () => {
+    await t.test('automatic IDs, edit retaining password, required fields and leading zeroes', async () => {
         const user = { userId: 'U100', firstName: 'ทดสอบ', lastName: 'ระบบ', phone: '0123456789', password: 'test-user', posId: 'P3' };
         assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: { ...user, phone: 123 } })).status, 400);
-        assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: user })).status, 201);
-        assert.equal(records.get('U100')[3], '0123456789');
-        assert.equal(records.get('U100')[4], null);
-        assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: user })).status, 409);
-        assert.equal((await request('/users/U100', { method: 'PUT', cookie: admin.cookie, body: { ...user, password: '' } })).status, 200);
-        assert.equal(records.get('U100')[6], 'test-user');
+        const created = await request('/users', { method: 'POST', cookie: admin.cookie, body: user });
+        assert.equal(created.status, 201);
+        assert.equal(created.body.userId, 'U003');
+        assert.equal(records.get('U003')[3], '0123456789');
+        assert.equal(records.get('U003')[4], null);
+        assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: user })).body.userId, 'U004');
+        assert.equal((await request('/users/U003', { method: 'PUT', cookie: admin.cookie, body: { ...user, password: '' } })).status, 200);
+        assert.equal(records.get('U003')[6], 'test-user');
         assert.equal((await request('/users/missing', { method: 'PUT', cookie: admin.cookie, body: user })).status, 404);
         assert.equal((await request('/users/missing', { cookie: admin.cookie })).status, 404);
+    });
+    await t.test('user access follows database grants for every position, including P1 revocation', async () => {
+        grants.add('P2:SC01');
+        assert.equal((await request('/users', { cookie: driver.cookie })).status, 200);
+        assert.equal((await request('/users/U002', { method: 'PUT', cookie: driver.cookie, body: { firstName: 'Test', lastName: 'Driver', posId: 'P2' } })).status, 200);
+        grants.delete('P2:SC01');
+        assert.equal((await request('/users', { cookie: driver.cookie })).status, 403);
+        grants.delete('P1:SC01');
+        assert.equal((await request('/users', { cookie: admin.cookie })).status, 403);
+        grants.add('P1:SC01');
+        assert.equal((await request('/users/U002', { method: 'DELETE', cookie: admin.cookie })).status, 400);
     });
     await t.test('self protection and session revocation', async () => {
         assert.equal((await request('/users/U001', { method: 'DELETE', cookie: admin.cookie })).status, 400);
         assert.equal((await request('/users/U001', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Admin', lastName: 'Test', posId: 'P3' } })).status, 400);
-        await request('/users/U002', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Test', lastName: 'Driver', posId: 'P2', password: 'changed' } });
+        await request('/users/U002', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Test', lastName: 'Driver', posId: 'P2', password: 'changed-password' } });
         assert.equal((await request('/auth/me', { cookie: driver.cookie })).status, 401);
-        assert.equal((await request('/users/U100', { method: 'DELETE', cookie: admin.cookie })).status, 200);
-        assert.equal((await request('/users/U100', { method: 'DELETE', cookie: admin.cookie })).status, 404);
+        assert.equal((await request('/users/U003', { method: 'DELETE', cookie: admin.cookie })).status, 200);
+        assert.equal((await request('/users/U003', { method: 'DELETE', cookie: admin.cookie })).status, 404);
     });
     await t.test('database failure, connection cleanup and logout', async () => {
         broken = true;

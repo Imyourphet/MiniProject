@@ -29,6 +29,7 @@ export function useShuttle() {
     try {
       const next = await api('/shuttle/actions', { method: 'POST', body: { type, payload } });
       if (active.current && requestId.current === id) { setData(next); setError(''); }
+      return next;
     } finally { writing.current = false; }
   }, []);
   return { data, error, reload, dispatch };

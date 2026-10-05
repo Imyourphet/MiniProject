@@ -17,20 +17,26 @@ function memoryDatabase(seed, users) {
             let local = structuredClone(state), release;
             return {
                 async execute(sql, binds = {}) {
+                    sql = sql.replace(/\s+/g, ' ').trim();
                     logs.push({ sql, binds: structuredClone(binds) });
-                    if (sql.startsWith('LOCK TABLE USERS')) {
+                    if (sql.startsWith('LOCK TABLE USERS') || sql.endsWith(' FOR UPDATE')) {
                         const previous = queue;
                         queue = new Promise(resolve => { release = resolve; });
                         await previous;
                         local = structuredClone(state);
-                        return {};
+                        if (sql.startsWith('LOCK')) return {};
+                        sql = sql.replace(/ FOR UPDATE$/, '');
                     }
                     if (sql.startsWith('LOCK ') || sql.startsWith('SET TRANSACTION')) return {};
                     if (sql.startsWith('SELECT')) {
                         const match = sql.match(/^SELECT (.+) FROM (\w+)(?: WHERE (.+?))?(?: ORDER BY .+)?$/);
                         if (!match) throw new Error(`Unsupported fixture SELECT: ${sql}`);
                         let rows = local[match[2]];
-                        if (match[3]) rows = rows.filter(row => row.USER_ID === binds.userId);
+                        if (match[3]) rows = rows.filter(row => match[3].split(' AND ').every(condition => {
+                            const [column, bind] = condition.split(' = ');
+                            return row[column] === binds[bind.slice(1)];
+                        }));
+                        if (match[1] === 'COUNT(*) AS CNT') return { rows: [[rows.length]] };
                         const cols = match[1].split(',').map(col => col.trim());
                         return { rows: rows.map(row => cols.map(col => row[col] ?? null)) };
                     }
@@ -49,8 +55,9 @@ function memoryDatabase(seed, users) {
                     }
                     if ((match = sql.match(/^UPDATE (\w+) SET (.+) WHERE (.+)$/))) {
                         const rows = local[match[1]].filter(row => matches(row, match[3]));
-                        for (const row of rows) for (const assignment of match[2].split(', ')) {
-                            const [col, bind] = assignment.split(' = '); row[col] = binds[bind.slice(1)];
+                        for (const row of rows) for (const assignment of match[2].matchAll(/(\w+) = (?:NVL\(:(\w+), (\w+)\)|:(\w+))/g)) {
+                            const [, col, nullable, fallback, bind] = assignment;
+                            row[col] = nullable ? binds[nullable] ?? row[fallback] : binds[bind];
                         }
                         return { rowsAffected: rows.length };
                     }

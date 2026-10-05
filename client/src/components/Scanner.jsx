@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
 
-export default function Scanner({ onScan }) {
+export default function Scanner({ onScan, paused = false }) {
   const video = useRef(null), handler = useRef(onScan);
   const [enabled, setEnabled] = useState(false), [facing, setFacing] = useState('environment'), [error, setError] = useState('');
   useEffect(() => { handler.current = onScan; }, [onScan]);
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || paused) return;
     let disposed = false, stream, frame, lastCode = '', lastAt = 0, lastTry = 0;
     const element = video.current, canvas = document.createElement('canvas'), context = canvas.getContext('2d', { willReadFrequently: true });
     const stop = () => { if (frame) cancelAnimationFrame(frame); stream?.getTracks().forEach(track => track.stop()); if (element) element.srcObject = null; };
@@ -41,8 +41,8 @@ export default function Scanner({ onScan }) {
     }
     start();
     return () => { disposed = true; stop(); document.removeEventListener('visibilitychange', hidden); };
-  }, [enabled, facing]);
-  return <div className="scanner"><div className="camera-frame"><video ref={video} muted playsInline aria-label="กล้องสแกน QR" />{!enabled && <span>เปิดกล้องเพื่อสแกน QR ผู้โดยสาร</span>}</div>
+  }, [enabled, facing, paused]);
+  return <div className="scanner"><div className="scanner-title">Camera Scanner <small>วาง QR Code ให้อยู่ในกรอบ</small></div><div className="camera-frame"><video ref={video} muted playsInline aria-label="กล้องสแกน QR" /><div className="scan-guide" />{(!enabled || paused) && <span>{paused ? 'ตรวจสอบและยืนยันผู้โดยสารด้านล่าง' : 'เปิดกล้องเพื่อสแกน QR ผู้โดยสาร'}</span>}</div>
     <div className="actions"><button onClick={() => { setError(''); setEnabled(value => !value); }}>{enabled ? 'ปิดกล้อง' : 'เปิดกล้อง'}</button><button className="secondary" onClick={() => setFacing(value => value === 'environment' ? 'user' : 'environment')}>สลับกล้อง</button></div>
     {error && <p role="alert" className="error">{error}</p>}
   </div>;

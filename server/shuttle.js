@@ -66,15 +66,8 @@ async function loadShuttle(connection) {
 function publicShuttle(data, user) {
     const result = structuredClone(data);
     delete result.userRefs;
-    // SQL has no SC10/SC11 records yet: these two management pages are fixed P1 features.
-    for (const screen of [{ id: 'SC10', name: 'จัดการแผนก' }, { id: 'SC11', name: 'จัดการรถ' }]) {
-        if (!result.screens.some(s => s.id === screen.id)) {
-            result.screens.push({ ...screen, fixed: true });
-            result.perms.push({ posId: 'P1', screenId: screen.id, seq: result.perms.length + 1 });
-        }
-    }
     for (const round of result.rounds) round.reservedSeats = data.bookingDetails.filter(d => d.roundId === round.id && d.statusId !== 'BS5').reduce((n, d) => n + d.seats, 0);
-    if (user.posId !== 'P1') {
+    if (!data.perms.some(p => p.posId === user.posId && ['SC04', 'SC05'].includes(p.screenId))) {
         const mine = new Set(data.bookings.filter(b => b.userId === user.userId).map(b => b.id));
         const assigned = new Set(data.rounds.filter(r => data.schedules.some(s => s.id === r.scheduleId && s.empId === user.userId)).map(r => r.id));
         const canDrive = data.perms.some(p => p.posId === user.posId && ['SC06', 'SC07', 'SC08'].includes(p.screenId));
@@ -84,14 +77,10 @@ function publicShuttle(data, user) {
     return result;
 }
 
-function validateAction(data, action, user) {
+function validateAction(data, action, user, screen) {
     const { type, payload: p } = action;
-    const masterScreen = { departments: 'SC10', positions: 'SC02', cars: 'SC11', carTypes: 'SC11', routes: 'SC03', stops: 'SC03' };
-    const screen = ['saveMaster', 'deleteMaster'].includes(type) ? masterScreen[p.collection] : { permission: 'SC02', addStop: 'SC03', removeStop: 'SC03', addSchedule: 'SC04', deleteSchedule: 'SC04', openRounds: 'SC04', deleteRound: 'SC04', book: 'SC09', cancelBooking: 'SC09', start: 'SC06', checkIn: 'SC07', alight: 'SC07', close: 'SC08' }[type];
     if (!screen) throw error400('ไม่รู้จักคำสั่ง');
-    const fixed = ['SC10', 'SC11'].includes(screen) && user.posId === 'P1';
-    if (!fixed && !data.perms.some(pm => pm.posId === user.posId && pm.screenId === screen)) throw error403();
-    if (type === 'permission' && !data.screens.some(s => s.id === p.screenId)) throw error400('เมนูนี้เป็นสิทธิ์ผู้ดูแลแบบคงที่');
+    if (!data.perms.some(pm => pm.posId === user.posId && pm.screenId === screen)) throw error403();
     if (type === 'saveMaster') {
         const spec = SPECS.find(s => s[0] === p.collection);
         if (!p.item || typeof p.item !== 'object') throw error400('ข้อมูลไม่ครบถ้วน');
@@ -153,8 +142,8 @@ async function applyAction(connection, input, authenticatedUser) {
     const user = before.userRefs.find(u => u.userId === authenticatedUser.userId);
     if (!user) throw error403();
     const action = structuredClone(input);
-    validateAction(before, action, user);
-    const { transition, activeSeats } = await import('../shared/shuttle.mjs');
+    const { transition, activeSeats, actionScreen } = await import('../shared/shuttle.mjs');
+    validateAction(before, action, user, actionScreen(action.type, action.payload));
     let after;
     try { after = transition(before, action, user); } catch (error) { throw error400(error.message); }
     for (const round of after.rounds) {
