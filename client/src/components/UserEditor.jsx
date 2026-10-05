@@ -30,9 +30,9 @@ export default function UserEditor({ editing, me, data, onSaved }) {
       <Select label="แผนก" name="deptId" options={data.departments} defaultValue={editing?.deptId || ''} />
       <Select label="ตำแหน่ง" name="posId" options={data.positions} required defaultValue={editing?.posId || ''} disabled={editing?.userId === me.userId} />
       <div className="wide password-control">
-        <Field label={editing ? 'รหัสผ่านใหม่ (เว้นว่างเพื่อใช้เดิม)' : 'รหัสผ่าน'} name="password" type={visible ? 'text' : 'password'} autoComplete="new-password" minLength={8} maxLength={50} required={!editing} value={password} onChange={event => setPassword(event.target.value)} />
+        <Field label={editing ? 'รหัสผ่านใหม่ (เว้นว่างเพื่อใช้เดิม)' : 'รหัสผ่าน'} name="password" type={visible ? 'text' : 'password'} autoComplete="new-password" minLength={6} maxLength={6} required={!editing} value={password} onChange={event => setPassword(event.target.value)} />
         <div className="actions"><button type="button" className="secondary" onClick={() => { setPassword(generatePassword()); setVisible(true); }}>สุ่มรหัสผ่าน</button><button type="button" className="secondary" aria-pressed={visible} onClick={() => setVisible(value => !value)}>{visible ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}</button></div>
-        <small className="muted">รหัสผ่าน 8–50 ตัวอักษร กรุณาจดรหัสผ่านก่อนบันทึก</small>
+        <small className="muted">รหัสผ่าน 6 ตัวอักษรเท่านั้น กรุณาจดรหัสผ่านก่อนบันทึก</small>
       </div>
       {!editing && <small className="muted wide">ระบบกำหนดรหัสผู้ใช้งานให้อัตโนมัติ รหัสสุดท้ายจะแสดงหลังบันทึก</small>}
     </ActionForm>

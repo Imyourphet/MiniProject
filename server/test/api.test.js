@@ -74,7 +74,7 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
         assert.equal(directory.body[0].password, undefined);
     });
     await t.test('automatic IDs, edit retaining password, required fields and leading zeroes', async () => {
-        const user = { userId: 'U100', firstName: 'ทดสอบ', lastName: 'ระบบ', phone: '0123456789', password: 'test-user', posId: 'P3' };
+        const user = { userId: 'U100', firstName: 'ทดสอบ', lastName: 'ระบบ', phone: '0123456789', password: 'Aa1@bc', posId: 'P3' };
         assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: { ...user, phone: 123 } })).status, 400);
         const created = await request('/users', { method: 'POST', cookie: admin.cookie, body: user });
         assert.equal(created.status, 201);
@@ -83,7 +83,7 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
         assert.equal(records.get('U003')[4], null);
         assert.equal((await request('/users', { method: 'POST', cookie: admin.cookie, body: user })).body.userId, 'U004');
         assert.equal((await request('/users/U003', { method: 'PUT', cookie: admin.cookie, body: { ...user, password: '' } })).status, 200);
-        assert.equal(records.get('U003')[6], 'test-user');
+        assert.equal(records.get('U003')[6], 'Aa1@bc');
         assert.equal((await request('/users/missing', { method: 'PUT', cookie: admin.cookie, body: user })).status, 404);
         assert.equal((await request('/users/missing', { cookie: admin.cookie })).status, 404);
     });
@@ -101,7 +101,7 @@ test('Oracle-backed authentication and user CRUD with an isolated database stub'
     await t.test('self protection and session revocation', async () => {
         assert.equal((await request('/users/U001', { method: 'DELETE', cookie: admin.cookie })).status, 400);
         assert.equal((await request('/users/U001', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Admin', lastName: 'Test', posId: 'P3' } })).status, 400);
-        await request('/users/U002', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Test', lastName: 'Driver', posId: 'P2', password: 'changed-password' } });
+        await request('/users/U002', { method: 'PUT', cookie: admin.cookie, body: { firstName: 'Test', lastName: 'Driver', posId: 'P2', password: 'Bb2@cd' } });
         assert.equal((await request('/auth/me', { cookie: driver.cookie })).status, 401);
         assert.equal((await request('/users/U003', { method: 'DELETE', cookie: admin.cookie })).status, 200);
         assert.equal((await request('/users/U003', { method: 'DELETE', cookie: admin.cookie })).status, 404);

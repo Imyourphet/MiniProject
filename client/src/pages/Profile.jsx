@@ -19,8 +19,8 @@ export default function Profile({ me, data, onSaved }) {
         <Field label="นามสกุล" name="lastName" required defaultValue={me.lastName} autoComplete="family-name" />
         <div className="wide"><h3>เปลี่ยนรหัสผ่าน</h3><p className="muted">เว้นช่องรหัสผ่านว่าง หากต้องการเปลี่ยนเฉพาะชื่อ</p></div>
         <Field label="รหัสผ่านปัจจุบัน" name="currentPassword" type="password" autoComplete="current-password" maxLength={50} />
-        <Field label="รหัสผ่านใหม่ (8–50 ตัวอักษร)" name="newPassword" type="password" autoComplete="new-password" minLength={8} maxLength={50} />
-        <Field label="ยืนยันรหัสผ่านใหม่" name="confirmPassword" type="password" autoComplete="new-password" minLength={8} maxLength={50} />
+        <Field label="รหัสผ่านใหม่ (6 ตัวอักษรเท่านั้น)" name="newPassword" type="password" autoComplete="new-password" minLength={6} maxLength={6} />
+        <Field label="ยืนยันรหัสผ่านใหม่" name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={6} />
       </ActionForm>
     </Card>
   </div>;

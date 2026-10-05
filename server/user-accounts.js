@@ -39,7 +39,7 @@ async function updateProfile(connection, userId, body) {
     if (![firstName, lastName].every(value => typeof value === 'string' && value.trim())) throw invalid('กรอกชื่อและนามสกุลให้ครบ');
     if (typeof newPassword !== 'string') throw invalid('รหัสผ่านต้องเป็นข้อความ');
     if (!newPassword && (currentPassword || confirmPassword)) throw invalid('กรอกรหัสผ่านใหม่ หรือเว้นช่องรหัสผ่านทั้งหมดว่างเพื่อเปลี่ยนเฉพาะชื่อ');
-    if (newPassword && (newPassword.length < 8 || newPassword.length > 50)) throw invalid('รหัสผ่านใหม่ต้องมีความยาว 8–50 ตัวอักษร');
+    if (newPassword && newPassword.length !== 6) throw invalid('รหัสผ่านใหม่ต้องมีความยาว 6 ตัวอักษรเท่านั้น');
     if (newPassword && newPassword !== confirmPassword) throw invalid('รหัสผ่านใหม่และการยืนยันไม่ตรงกัน');
     if (newPassword && (typeof currentPassword !== 'string' || !currentPassword)) throw invalid('กรอกรหัสผ่านปัจจุบันเพื่อเปลี่ยนรหัสผ่าน');
     try {

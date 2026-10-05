@@ -18,7 +18,7 @@ function validateUser(user, editing = false) {
     for (const field of ['phone', 'deptId', 'password']) {
         if (user[field] != null && typeof user[field] !== 'string') return `${field} ต้องเป็นข้อความ`;
     }
-    if (user.password && (user.password.length < 8 || user.password.length > 50)) return 'รหัสผ่านต้องมีความยาว 8–50 ตัวอักษร';
+    if (user.password && user.password.length !== 6) return 'รหัสผ่านต้องมีความยาว 6 ตัวอักษรเท่านั้น';
     return null;
 }
 
