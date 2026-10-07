@@ -17,6 +17,49 @@ test('date adapter handles actual Oracle string date formats', () => {
     assert.equal(normalizeDate('2026-09-13'), '2026-09-13');
 });
 
+test('opening rounds through the API persists 1, 3 and 7 days without duplicates', async t => {
+    const { createDemoData } = await import('../../shared/test/fixtures.mjs');
+    const { todayISO, addDays } = await import('../../shared/dates.mjs');
+    for (const days of [1, 3, 7]) await t.test(`${days} days`, async () => {
+        const seed = createDemoData();
+        seed.cars[0].statusId = 'CS2'; // A car under repair must not get new rounds.
+        const db = memoryDatabase(seed, users);
+        const server = createApp(db.connect).listen(0, '127.0.0.1');
+        await new Promise(resolve => server.once('listening', resolve));
+        try {
+            const base = `http://127.0.0.1:${server.address().port}/api`;
+            const login = await fetch(base + '/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'U001', password: 'test-admin' }) });
+            assert.equal(login.status, 200);
+            const cookie = login.headers.get('set-cookie').split(';')[0];
+            const date = addDays(todayISO(), 10);
+            const request = () => fetch(base + '/shuttle/actions', {
+                method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'openRounds', payload: { date, days } }),
+            });
+            const response = await request();
+            assert.equal(response.status, 200);
+            const opened = (await response.json()).rounds.filter(round => round.date >= date);
+            const eligible = seed.schedules.filter(schedule => seed.cars.find(car => car.id === schedule.carId).statusId !== 'CS2');
+            assert.equal(opened.length, eligible.length * days);
+            for (let day = 0; day < days; day++) for (const schedule of eligible) {
+                const round = opened.find(item => item.scheduleId === schedule.id && item.date === addDays(date, day));
+                assert.ok(round);
+                assert.equal(round.statusId, 'RS1');
+                const stored = db.tables().TRIP_ROUND.find(item => item.ROUND_ID === round.id);
+                assert.equal(stored.TRIP_DATE, round.date);
+                assert.equal(stored.STATUS_ID, 'BC001');
+            }
+            const beforeRepeat = structuredClone(db.tables());
+            assert.equal((await request()).status, 200);
+            assert.deepEqual(db.tables(), beforeRepeat);
+            const snapshot = await fetch(base + '/shuttle', { headers: { Cookie: cookie } });
+            assert.equal(snapshot.status, 200);
+            assert.deepEqual((await snapshot.json()).rounds.filter(round => round.date >= date), opened);
+        } finally { await new Promise(resolve => server.close(resolve)); }
+        assert.equal(db.metrics.opened, db.metrics.closed);
+    });
+});
+
 test('Oracle mappings, transactions, rollback, privacy and seat contention', async t => {
     const { createDemoData, todayISO, addDays } = await import('../../shared/test/fixtures.mjs');
     const db = memoryDatabase(createDemoData(), users);

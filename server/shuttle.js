@@ -106,12 +106,16 @@ function validateAction(data, action, user, screen) {
 
 async function persistChanges(connection, before, after) {
     const keyOf = (item, keys) => JSON.stringify(keys.map(key => item[key]));
+    // Domain fields such as "date" are Oracle reserved words, so never use
+    // them directly as bind names (ORA-01745).
+    const bindName = key => `b_${key}`;
+    const bindValues = (collection, item, keys) => Object.fromEntries(keys.map(key => [bindName(key), encodeStatus(collection, key, item[key])]));
     // Delete child rows before parents to respect the database foreign keys.
     for (const [collection, table, fields, keys] of [...SPECS].reverse()) {
         const remaining = new Set(after[collection].map(item => keyOf(item, keys)));
         for (const item of before[collection]) if (!remaining.has(keyOf(item, keys))) {
-            const binds = Object.fromEntries(keys.map(key => [key, encodeStatus(collection, key, item[key])]));
-            await connection.execute(`DELETE FROM ${table} WHERE ${keys.map(key => `${fields[key]} = :${key}`).join(' AND ')}`, binds);
+            const binds = bindValues(collection, item, keys);
+            await connection.execute(`DELETE FROM ${table} WHERE ${keys.map(key => `${fields[key]} = :${bindName(key)}`).join(' AND ')}`, binds);
         }
     }
     for (const [collection, table, fields, keys] of SPECS) {
@@ -121,12 +125,12 @@ async function persistChanges(connection, before, after) {
             const columns = Object.keys(fields);
             if (!previous) {
                 for (const key of keys) if (typeof item[key] === 'string' && item[key].length > 10) throw error400('รหัสที่สร้างยาวเกิน 10 ตัวอักษร');
-                await connection.execute(`INSERT INTO ${table} (${Object.values(fields).join(', ')}) VALUES (${columns.map(key => `:${key}`).join(', ')})`, Object.fromEntries(columns.map(key => [key, encodeStatus(collection, key, item[key])])));
+                await connection.execute(`INSERT INTO ${table} (${Object.values(fields).join(', ')}) VALUES (${columns.map(key => `:${bindName(key)}`).join(', ')})`, bindValues(collection, item, columns));
             } else {
                 const changed = columns.filter(key => !keys.includes(key) && item[key] !== previous[key]);
                 if (!changed.length) continue;
-                const binds = Object.fromEntries([...changed, ...keys].map(key => [key, encodeStatus(collection, key, item[key])]));
-                await connection.execute(`UPDATE ${table} SET ${changed.map(key => `${fields[key]} = :${key}`).join(', ')} WHERE ${keys.map(key => `${fields[key]} = :${key}`).join(' AND ')}`, binds);
+                const binds = bindValues(collection, item, [...changed, ...keys]);
+                await connection.execute(`UPDATE ${table} SET ${changed.map(key => `${fields[key]} = :${bindName(key)}`).join(', ')} WHERE ${keys.map(key => `${fields[key]} = :${bindName(key)}`).join(' AND ')}`, binds);
             }
         }
     }

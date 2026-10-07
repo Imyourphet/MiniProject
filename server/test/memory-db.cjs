@@ -19,6 +19,7 @@ function memoryDatabase(seed, users) {
                 async execute(sql, binds = {}) {
                     sql = sql.replace(/\s+/g, ' ').trim();
                     logs.push({ sql, binds: structuredClone(binds) });
+                    if (/:date\b/i.test(sql)) throw Object.assign(new Error('ORA-01745: invalid host/bind variable name'), { code: 'ORA-01745', errorNum: 1745 });
                     if (sql.startsWith('LOCK TABLE USERS') || sql.endsWith(' FOR UPDATE')) {
                         const previous = queue;
                         queue = new Promise(resolve => { release = resolve; });
