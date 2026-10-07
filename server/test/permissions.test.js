@@ -42,8 +42,8 @@ test('Oracle adapter persists position and department CRUD and flexible permissi
     await assert.rejects(act(db, 'saveMaster', { collection: 'departments', item: { id: 'DDENY', name: 'ไม่มีสิทธิ์' } }, member), { status: 403 });
     await act(db, 'permission', { posId: 'P1', screenId: 'SC10', on: false });
     await assert.rejects(act(db, 'deleteMaster', { collection: 'departments', id: 'D0001' }), { status: 403 });
-    await act(db, 'permission', { posId: 'P1', screenId: 'SC02', on: false });
-    await assert.rejects(act(db, 'permission', { posId: 'P1', screenId: 'SC02', on: true }), { status: 403 });
+       await assert.rejects(act(db, 'permission', { posId: 'P1', screenId: 'SC02', on: false }), { status: 400 });
+    assert.ok(db.tables().PERMISSION.some(p => p.POS_ID === 'P1' && p.SCREEN_ID === 'SC02'));
 });
 
 test('migration persists missing screens and removes only the unused test position; reruns preserve revocations', async () => {

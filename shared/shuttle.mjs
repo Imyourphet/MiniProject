@@ -67,6 +67,7 @@ export function transition(current, action, user) {
     if (p.collection === 'positions') data.perms = data.perms.filter(pm => pm.posId !== p.id);
   } else if (type === 'permission') {
     requireValue(byId(data.positions, p.posId).id && byId(data.screens, p.screenId).id && typeof p.on === 'boolean', 'ตำแหน่ง หน้าจอ หรือสถานะสิทธิ์ไม่ถูกต้อง');
+    requireValue(!(p.posId === user.posId && p.screenId === 'SC02' && !p.on), 'ปิดสิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเองไม่ได้');
     data.perms = data.perms.filter(pm => !(pm.posId === p.posId && pm.screenId === p.screenId));
     if (p.on) data.perms.push({ posId: p.posId, screenId: p.screenId, seq: Math.max(0, ...data.perms.map(pm => pm.seq)) + 1 });
   } else if (type === 'addStop') {
