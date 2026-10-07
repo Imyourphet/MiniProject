@@ -68,13 +68,13 @@ test('schedule conflicts, referenced deletes and management permissions are enfo
 test('every screen can be granted and revoked for every position', () => {
   const seed = createDemoData();
   for (const position of seed.positions) for (const screen of seed.screens) {
+        if (position.id === admin.posId && screen.id === 'SC02') continue; // สิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเอง ทดสอบแยกด้านล่าง
     const enabled = run(seed, 'permission', { posId: position.id, screenId: screen.id, on: true });
     assert.ok(enabled.perms.some(p => p.posId === position.id && p.screenId === screen.id));
     const disabled = run(enabled, 'permission', { posId: position.id, screenId: screen.id, on: false });
     assert.ok(!disabled.perms.some(p => p.posId === position.id && p.screenId === screen.id));
   }
-  const revoked = run(seed, 'permission', { posId: 'P1', screenId: 'SC02', on: false });
-  assert.throws(() => run(revoked, 'permission', { posId: 'P1', screenId: 'SC02', on: true }), /ไม่มีสิทธิ์/);
+   assert.throws(() => run(seed, 'permission', { posId: 'P1', screenId: 'SC02', on: false }), /ปิดสิทธิ์กำหนดสิทธิ์ของตำแหน่งตัวเองไม่ได้/);
   assert.throws(() => run(seed, 'permission', { posId: 'unknown', screenId: 'SC01', on: true }), /ไม่ถูกต้อง/);
 });
 
