@@ -1,0 +1,47 @@
+/* SC02 ช่องค้นหาตำแหน่ง */
+.permission-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 8px 6px 16px;
+  margin-bottom: 14px;
+  color: var(--blue);
+}
+
+.permission-search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 3px 12px #729af52b;
+}
+
+.permission-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 6px 0;
+}
+
+.permission-search input:focus {
+  outline: none;
+}
+
+.permission-search input::placeholder {
+  color: var(--muted);
+}
+
+.clear-search {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--blue-light);
+  color: var(--blue-dark);
+}
+
+.clear-search:hover {
+  background: #e0e9ff;
+  box-shadow: none;
+}
