@@ -31,10 +31,9 @@ export function Permissions(props) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
   const [search, setSearch] = useState(''); 
-
+const shown = data.positions.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
   // ตำแหน่งที่กำลังเลือกดูอยู่ (ถ้าไม่เจอ ให้ใช้ตำแหน่งแรก)
-  const position = byId(data.positions, selected).id ? byId(data.positions, selected) : data.positions[0] || {};
-
+const position = byId(shown, selected).id ? byId(shown, selected) : {};   // ← ล่าง
   const icon = { SC01: 'users', SC02: 'shield', SC03: 'route', SC04: 'bus', SC05: 'chart', SC06: 'calendar', SC07: 'qr', SC08: 'flag', SC09: 'ticket', SC10: 'users', SC11: 'bus' };
 
   // เปิด/ปิดสิทธิ์ 1 หน้าจอ แล้วส่งไปบันทึกที่ server
@@ -60,13 +59,15 @@ export function Permissions(props) {
     onChange={event => setSearch(event.target.value)}
   />
       {/* แท็บเลือกตำแหน่ง */}
-      <div className="tabs role-tabs">
-{data.positions.filter(p => p.name.includes(search)).map(p => (          <button key={p.id} className={position.id === p.id ? '' : 'secondary'} onClick={() => { setSelected(p.id); setSaved(''); }}>
+          <div className="tabs role-tabs">
+        {shown.map(p => (
+          <button key={p.id} className={position.id === p.id ? '' : 'secondary'} onClick={() => { setSelected(p.id); setSaved(''); }}>
             <Icon name={position.id === p.id ? 'check' : 'user'} size={15} /> {p.name}
           </button>
         ))}
-      </div>
+            </div>
 
+      {position.id ? (<>
       <Card>
         <div className="person">
           <span className="round-icon"><Icon name="shield" /></span>
@@ -120,7 +121,15 @@ export function Permissions(props) {
           );
         })}
       </div>
-
+                 <p role="status" className="save-status">
+        <Icon name="check" size={17} />{busy ? 'กำลังบันทึก…' : saved || 'สิทธิ์ปัจจุบันบันทึกไว้แล้ว'}
+      </p>
+      </>) : (
+        <p className="notice">
+          {shown.length === 0 ? `ไม่พบตำแหน่ง "${search}"` : 'เลือกตำแหน่งด้านบนเพื่อดูและแก้ไขสิทธิ์'}
+        </p>
+      )}
+    
       <div className="permission-footer">
         <Icon name="shield" size={44} />
         <small>MUT SMART TRANSIT</small>
@@ -128,9 +137,7 @@ export function Permissions(props) {
         <p>จัดการสิทธิ์ให้เหมาะสมกับหน้าที่ เพื่อการเดินทางที่ราบรื่นของทุกคน</p>
       </div>
 
-      <p role="status" className="save-status">
-        <Icon name="check" size={17} />{busy ? 'กำลังบันทึก…' : saved || 'สิทธิ์ปัจจุบันบันทึกไว้แล้ว'}
-      </p>
+         
 
       {/* เพิ่ม / แก้ไข / ลบ ตำแหน่ง */}
       <details className="management-details">
