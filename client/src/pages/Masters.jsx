@@ -30,6 +30,7 @@ export function Permissions(props) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
+  const [search, setSearch] = useState(''); 
 
   // ตำแหน่งที่กำลังเลือกดูอยู่ (ถ้าไม่เจอ ให้ใช้ตำแหน่งแรก)
   const position = byId(data.positions, selected).id ? byId(data.positions, selected) : data.positions[0] || {};
@@ -53,10 +54,14 @@ export function Permissions(props) {
 
   return (
     <div className="permissions-page">
+      <input
+    placeholder="ค้นหาตำแหน่ง"
+    value={search}
+    onChange={event => setSearch(event.target.value)}
+  />
       {/* แท็บเลือกตำแหน่ง */}
       <div className="tabs role-tabs">
-        {data.positions.map(p => (
-          <button key={p.id} className={position.id === p.id ? '' : 'secondary'} onClick={() => { setSelected(p.id); setSaved(''); }}>
+{data.positions.filter(p => p.name.includes(search)).map(p => (          <button key={p.id} className={position.id === p.id ? '' : 'secondary'} onClick={() => { setSelected(p.id); setSaved(''); }}>
             <Icon name={position.id === p.id ? 'check' : 'user'} size={15} /> {p.name}
           </button>
         ))}
