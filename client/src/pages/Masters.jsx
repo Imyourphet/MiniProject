@@ -3,17 +3,66 @@ import { ActionButton, ActionForm, Card, Field, Select, Table } from '../compone
 import { byId } from '../lib/shuttle';
 import Icon from '../components/Icon';
 import './Permissions.css';
+// ฟอร์มกลาง ใช้ร่วมกันหลายหน้า (ตำแหน่ง แผนก รถ) ใช้ได้ทั้งเพิ่มและแก้ไข
 export function MasterEditor({ data, dispatch, collection, title, fields, inUse = () => false, nextId, validate }) {
-  const [editing, setEditing] = useState(null), [revision, setRevision] = useState(0);
-  return <Card title={title}><ActionForm key={`${editing?.id || 'new'}-${revision}`} submit={editing ? 'บันทึก' : 'เพิ่ม'} onSubmit={async values => {
+  // editing = รายการที่กำลังแก้ (null = กำลังเพิ่มใหม่)
+  const [editing, setEditing] = useState(null);
+  // revision = นับครั้งที่บันทึก ใช้ล้างฟอร์มหลังบันทึก
+  const [revision, setRevision] = useState(0);
+
+  // กดเพิ่ม / บันทึก
+  async function save(values) {
+    // เลือกรหัส: แก้ไขใช้รหัสเดิม / เพิ่มใหม่ใช้รหัสอัตโนมัติ / หน้าที่ไม่มีรหัสอัตโนมัติใช้ที่พิมพ์
     const item = { ...values, id: (editing?.id || nextId || values.id).trim() };
+    // เช็คก่อนบันทึก เช่น ชื่อซ้ำ (ถ้าไม่ผ่านจะหยุดตรงนี้)
     if (validate) validate(item);
-    for (const field of fields) if (field.type === 'number') item[field.name] = Number(values[field.name]);
-    await dispatch('saveMaster', { collection, item, editing: !!editing }); setEditing(null); setRevision(n => n + 1);
-  }}><Field label="รหัส" name="id" required disabled={!!editing} readOnly={!!nextId} defaultValue={editing?.id || nextId} />
-    {fields.map(field => field.options ? <Select key={field.name} label={field.label} name={field.name} options={field.options} required defaultValue={editing?.[field.name] || field.defaultValue || ''} /> : <Field key={field.name} label={field.label} name={field.name} type={field.type || 'text'} min={field.min} required defaultValue={editing?.[field.name] ?? field.defaultValue ?? ''} />)}
-    {editing && <button type="button" className="secondary" onClick={() => setEditing(null)}>ยกเลิก</button>}
-  </ActionForm><Table heads={['รหัส', ...fields.map(f => f.label), 'จัดการ']} empty={!data[collection].length}>{data[collection].map(item => <tr key={item.id}><td>{item.id}</td>{fields.map(field => <td key={field.name}>{field.options ? byId(field.options, item[field.name]).name || item[field.name] : item[field.name]}</td>)}<td className="actions"><button className="secondary" onClick={() => setEditing(item)}>แก้ไข</button><ActionButton className="danger" confirm={`ลบ ${item.id}?`} action={async () => { await dispatch('deleteMaster', { collection, id: item.id, inUse: inUse(item.id) }); if (editing?.id === item.id) setEditing(null); }}>ลบ</ActionButton></td></tr>)}</Table></Card>;
+    for (const field of fields) {
+      if (field.type === 'number') item[field.name] = Number(values[field.name]);
+    }
+    await dispatch('saveMaster', { collection, item, editing: !!editing });
+    setEditing(null);
+    setRevision(n => n + 1);
+  }
+
+  // กดลบ (ถามยืนยันที่ปุ่มก่อน)
+  async function remove(item) {
+    await dispatch('deleteMaster', { collection, id: item.id, inUse: inUse(item.id) });
+    if (editing?.id === item.id) setEditing(null);
+  }
+
+  return (
+    <Card title={title}>
+      {/* key เปลี่ยน = สร้างฟอร์มใหม่ (หลังบันทึก / เปลี่ยนเพิ่มกับแก้ไข / รหัสถัดไปเปลี่ยน) */}
+      <ActionForm key={`${editing?.id || 'new'}-${revision}-${nextId}`} submit={editing ? 'บันทึก' : 'เพิ่ม'} onSubmit={save}>
+        {/* ช่องรหัส: ตอนแก้ไขเปลี่ยนไม่ได้ / ถ้ามีรหัสอัตโนมัติก็พิมพ์ไม่ได้ */}
+        <Field label="รหัส" name="id" required disabled={!!editing} readOnly={!!nextId} defaultValue={editing?.id || nextId} />
+
+        {/* ช่องอื่นตาม fields (มีตัวเลือก = dropdown / ไม่มี = ช่องพิมพ์) */}
+        {fields.map(field => field.options
+          ? <Select key={field.name} label={field.label} name={field.name} options={field.options} required defaultValue={editing?.[field.name] || field.defaultValue || ''} />
+          : <Field key={field.name} label={field.label} name={field.name} type={field.type || 'text'} min={field.min} required defaultValue={editing?.[field.name] ?? field.defaultValue ?? ''} />
+        )}
+
+        {editing && <button type="button" className="secondary" onClick={() => setEditing(null)}>ยกเลิก</button>}
+      </ActionForm>
+
+      {/* ตารางรายการ + ปุ่มแก้ไข / ลบ */}
+      <Table heads={['รหัส', ...fields.map(f => f.label), 'จัดการ']} empty={!data[collection].length}>
+        {data[collection].map(item => (
+          <tr key={item.id}>
+            <td>{item.id}</td>
+            {fields.map(field => (
+              <td key={field.name}>{field.options ? byId(field.options, item[field.name]).name || item[field.name] : item[field.name]}</td>
+            ))}
+            <td className="actions">
+              <button className="secondary" onClick={() => setEditing(item)}>แก้ไข</button>
+              <ActionButton className="danger" confirm={`ลบ ${item.id}?`} action={() => remove(item)}>ลบ</ActionButton>
+            </td>
+          </tr>
+        ))}
+      </Table>
+    </Card>
+  );
 }
 
 export function Departments(props) {
@@ -27,7 +76,8 @@ export function Cars(props) {
 // SC02 กำหนดสิทธิ์
 export function Permissions(props) {
   const { data, dispatch, users, me } = props;
-  const [selected, setSelected] = useState(me.posId); const [error, setError] = useState('');
+  const [selected, setSelected] = useState(me.posId);
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState('');
   const [search, setSearch] = useState('');
